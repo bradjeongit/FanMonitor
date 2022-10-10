@@ -13,8 +13,6 @@ import sys
 
 sys.setrecursionlimit(10**7)
 
-print("start nnn")
-
 class Load_excel():
 
     def __init__(self):
