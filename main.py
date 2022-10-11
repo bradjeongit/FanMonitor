@@ -216,7 +216,7 @@ class FanMonitor():
     def update(self):
 
         sys.setrecursionlimit(10**7)
-#        print(datetime.now(), '---------------------------------')
+        print(datetime.now(), '---------------------------------')
 
         self.df_show = self.f.read_speed(self.table.df, self.table.df_replaced) #팬 속도 읽어오기 교체 Fan 포함
         self.df_show = self.f.read_reference(self.df_show) #참고할 팬 속도 읽어오기
