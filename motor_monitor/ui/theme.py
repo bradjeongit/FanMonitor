@@ -24,8 +24,6 @@ LIGHT_GRAY = "#d3d3d3"          # WPF LightGray
 DARK_GRAY = "#a9a9a9"           # WPF DarkGray
 GROUP_BORDER = "#d5dfe5"        # WPF GroupBox 기본 테두리
 
-TAB_SELECTED = "#16a085"
-TAB_UNSELECTED = LIGHT_GRAY
 ZONE_TITLE_BG = "#34495e"
 SIDE_EVEN_BG = "#f39c12"        # 짝
 SIDE_ODD_BG = "#2980b9"         # 홀

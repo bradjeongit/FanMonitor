@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 문서 버전 | 1.0.0 (프로그램 버전과 동일) |
+| 문서 버전 | 1.1.0 (프로그램 버전과 동일) |
 | 대상 프로그램 | `motor_monitor` 패키지 (실행: `run.py`) |
 | 원본 | VB.NET WPF `Motor_Control` (BLDC_MOTOR_MONITOR) — `reference/original_vb/` 에 원본 소스 보관 |
 | 사용자 매뉴얼 | [USER_MANUAL.md](USER_MANUAL.md) |
@@ -22,20 +22,28 @@
 | `SCR-` | 화면(메인 창) | `SCR-MAIN` |
 | `DLG-` | 대화상자(팝업 창) | `DLG-LINE`, `DLG-MOTOR` |
 | `MAIN-` | 메인 화면 상단 구성요소 | `MAIN-BTN-H1-START` |
-| `ZONE-` | 구역 패널 | `ZONE-H1R1` (온실1 1구역) |
-| `LINE-` | 라인 패널(구역의 짝/홀 한 쪽) | `LINE-H1R1E` (온실1 1구역 짝) |
+| `ZONE-` | 구역 패널 (화면 구역번호 1~8) | `ZONE-5` (5구역 = 온실2 1구역) |
+| `LINE-` | 라인 패널(구역의 짝/홀 한 쪽) | `LINE-H1R1E` (1구역 짝), `LINE-H2R1E` (5구역 짝) |
 | `MSG-` | 메시지 창(확인/오류 알림) | `MSG-LINE-02` |
 | `P-` | 동작 파라미터(설정 상수) | `P-MOTOR-TIMEOUT` |
 | `C-` | 색상 | `C-NET-OK` |
 
 - 구성요소 종류 약어: `TAB` 탭, `BTN` 버튼, `TXT` 입력칸, `LBL` 표시 글자, `RB` 라디오버튼(선택 동그라미), `CB` 콤보박스(펼침 목록), `DOT` 상태 점, `LIST` 목록, `HDR` 머리글, `COL` 열, `ROW` 줄, `TITLE` 창 제목줄.
-- 라인 코드: `H{온실}R{구역}{E=짝 | O=홀}` — 예) `H1R3O` = 온실1 / 3구역 / 홀.
+- 라인 코드: `H{온실}R{온실 내 구역}{E=짝 | O=홀}` — 예) `H1R3O` = 3구역 홀, `H2R3O` = 7구역 홀.
+- **화면 구역번호(1~8)와 라인 코드 대응** (설정 파일 호환을 위해 내부 코드는 원본 그대로 유지)
+
+  | 화면 구역 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+  |---|---|---|---|---|---|---|---|---|
+  | 짝 라인 | H1R1E | H1R2E | H1R3E | H1R4E | H2R1E | H2R2E | H2R3E | H2R4E |
+  | 홀 라인 | H1R1O | H1R2O | H1R3O | H1R4O | H2R1O | H2R2O | H2R3O | H2R4O |
+
 - 16개 라인에 공통인 요소는 `LINE-*-BTN-SET` 처럼 `*` 로 표기합니다. 특정 라인만 지칭할 때는 `LINE-H1R2E-BTN-SET` 처럼 씁니다.
 
 ### 1.2 수정 요청 예시
 
 - "`LINE-*-LBL-REF` 글자를 굵게 해줘" → 16개 라인 모두의 RPM 소스 문구 변경
 - "`LINE-H1R1E-LIST` 의 `COL-STATUS` 에 마지막 수신시각도 보여줘"
+- "`ZONE-5`~`ZONE-8` 제목을 '온실2-1구역' 형식으로 바꿔줘"
 - "`DLG-MOTOR-TXT-ID` 허용 범위를 1~247 로 늘려줘" (관련 파라미터 `P-MOTOR-ID-RANGE`)
 - "`MSG-MAIN-04` 문구를 바꿔줘"
 - "`C-NET-ERR` 색을 주황색으로"
@@ -46,7 +54,7 @@
 
 | ID | 이름 | 여는 방법 | 크기 | 코드 (파일 / 클래스) | 원본 |
 |---|---|---|---|---|---|
-| `SCR-MAIN` | 메인 화면 | 프로그램 실행 | 기본 1280×820, 최소 1000×650, 크기조절 가능 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow.xaml` |
+| `SCR-MAIN` | 메인 화면 (1~8구역 한 화면) | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1280×700. 권장 해상도 1920×1080 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow.xaml` |
 | `DLG-LINE` | 라인설정 창 | `LINE-*-BTN-SET` 클릭 | 400×300 고정, 모달 | `motor_monitor/ui/dialogs.py` / `LineSettingsDialog` | `wHOUSE.xaml` |
 | `DLG-MOTOR` (ADD) | 모터 추가 창 | `LINE-*-BTN-ADD` 클릭 | 400×260 고정, 모달 | `dialogs.py` / `MotorDialog(mode="ADD")` | `wMotor.xaml` |
 | `DLG-MOTOR` (MOD) | 모터 수정/삭제 창 | `LINE-*-LIST` 항목 더블클릭 | 400×260 고정, 모달 | `dialogs.py` / `MotorDialog(mode="MOD")` | `wMotor.xaml` |
@@ -57,37 +65,37 @@
 
 ### 3.1 `SCR-MAIN` 메인 화면
 
+원본의 온실1/온실2 탭을 없애고, **한 화면에 1~8구역**을 4열×2행으로 배치합니다(윗줄 1~4구역 = 온실1, 아랫줄 5~8구역 = 온실2).
+
 ![메인 화면 구성요소 번호](images/main_running_annotated.png)
 
 | 번호 | ID | 이름 | 종류 | 코드 객체 | 표시 / 동작 |
 |---|---|---|---|---|---|
-| 1 | `MAIN-TAB-H1` | 온실1 탭 | 탭 | `MainWindow.house_tab` (0번) | 클릭 시 온실1 화면 표시. 선택 시 녹색(`C-TAB-SEL`)·흰 굵은 글씨 |
-| 2 | `MAIN-TAB-H2` | 온실2 탭 | 탭 | `MainWindow.house_tab` (1번) | 클릭 시 빈 화면 (원본과 동일하게 내용 없음) |
-| 3 | `MAIN-BTN-H1-START` | 온실1 제어 시작 버튼 | 버튼 | `MainWindow.H1_StartBtn` | 확인(`MSG-MAIN-02`) 후 온실1 8개 라인 통신·제어 시작 → 버튼이 `MAIN-BTN-H1-STOP` 으로 바뀜. 위치 x=250 |
-| 3 | `MAIN-BTN-H1-STOP` | 온실1 제어 종료 버튼 | 버튼 | `MainWindow.H1_StopBtn` | 확인(`MSG-MAIN-03`) 후 통신·제어 중지 → 시작 버튼으로 바뀜. 같은 위치 |
-| 4 | `MAIN-BTN-H2-START` | 온실2 제어 시작 버튼 | 버튼 | `MainWindow.H2_StartBtn` | **동작 안 함** (원본과 동일, `P-H2-CONTROL`=False). 위치 x=400 |
-| 4 | `MAIN-BTN-H2-STOP` | 온실2 제어 종료 버튼 | 버튼 | `MainWindow.H2_StopBtn` | 동작 안 함 (위와 같음) |
-| 5 | `ZONE-H1R{n}` | 구역 패널 (n=1~4) | 묶음 | `ZonePanel` | 2×2 배치: 1구역 좌상, 2구역 우상, 3구역 좌하, 4구역 우하 |
-| 5 | `ZONE-*-TITLE` | 구역 제목줄 | 글자 | `ZonePanel` 내부 Label | "n구역", 배경 `C-ZONE-TITLE`, 흰 굵은 글씨 |
-| 6 | `LINE-{코드}` | 라인 패널 | 묶음 | `LinePanel` (`MainWindow.line_panels[코드]`) | 구역 안 왼쪽=짝(E), 오른쪽=홀(O) |
-| 6 | `LINE-*-SIDE` | 짝/홀 표시 띠 | 글자 | `LinePanel` 내부 | 짝=주황(`C-SIDE-EVEN`), 홀=파랑(`C-SIDE-ODD`) |
-| 7 | `LINE-*-DOT-OLD` | 기존모터 통신상태 점 | 상태 점 | `LinePanel.rec_SOURCE_NETSTATUS` | 4.1절 색상 규칙 |
-| 7 | `LINE-*-LBL-OLD` | 기존모터 IP/PORT | 글자 | `LinePanel.lbl_old_ip` | "IP/PORT" 예) `192.168.0.1/502` |
-| 8 | `LINE-*-DOT-NEW` | 신규모터 통신상태 점 | 상태 점 | `LinePanel.rec_TARGET_NETSTATUS` | 4.1절 색상 규칙 |
-| 8 | `LINE-*-LBL-NEW` | 신규모터 IP/PORT | 글자 | `LinePanel.lbl_new_ip` | "IP/PORT" |
-| 9 | `LINE-*-DOT-REF` | RPM 소스 상태 점 | 상태 점 | `LinePanel.rec_SID_NETSTATUS` | 수동이면 항상 정상, 참조이면 참조 기존모터가 '정상'일 때만 정상 |
-| 9 | `LINE-*-LBL-REF` | RPM 소스 문구 | 글자 | `LinePanel.lbl_source` | 수동: `수동 > 800 RPM` / 참조: `1구역 > 짝 > 5` (구역 > 짝홀 > 모터ID) |
-| 10 | `LINE-*-BTN-SET` | 설정 버튼(톱니) | 그림 버튼 | `LinePanel.Btn_Settings` | 클릭 → `DLG-LINE`. 툴팁 "설정" |
-| 11 | `LINE-*-BTN-ADD` | 추가 버튼(+) | 그림 버튼 | `LinePanel.Btn_Add` | 클릭 → `DLG-MOTOR`(ADD). 툴팁 "추가" |
-| 12 | `LINE-*-LIST-HDR` | 모터 목록 머리글 | 머리글 | `MotorListView.header` | 열 머리글 클릭 시 정렬 (3.2절) |
-| 13 | `LINE-*-LIST` | 모터 목록 | 목록 | `LinePanel.LV` (`MotorListView`) | 3.2절 |
+| 1 | `MAIN-BTN-H1-START` | 1~4구역 제어 시작 버튼 | 버튼 | `MainWindow.H1_StartBtn` | 확인(`MSG-MAIN-02`) 후 1~4구역 8개 라인 통신·제어 시작 → `MAIN-BTN-H1-STOP` 으로 바뀜. 위치 x=0 |
+| 1 | `MAIN-BTN-H1-STOP` | 1~4구역 제어 종료 버튼 | 버튼 | `MainWindow.H1_StopBtn` | 확인(`MSG-MAIN-03`) 후 통신·제어 중지 → 시작 버튼으로 바뀜 |
+| 2 | `MAIN-BTN-H2-START` | 5~8구역 제어 시작 버튼 | 버튼 | `MainWindow.H2_StartBtn` | 확인(`MSG-MAIN-06`) 후 5~8구역 8개 라인 통신·제어 시작. 위치 x=150 (`P-H2-CONTROL`=True) |
+| 2 | `MAIN-BTN-H2-STOP` | 5~8구역 제어 종료 버튼 | 버튼 | `MainWindow.H2_StopBtn` | 확인(`MSG-MAIN-07`) 후 중지 |
+| 3 | `ZONE-{n}` | 구역 패널 (n=1~8) | 묶음 | `ZonePanel` (`MainWindow.zone_panels[n]`) | 윗줄 왼쪽부터 1~4구역, 아랫줄 5~8구역. 창 크기에 맞춰 균등 분할 |
+| 3 | `ZONE-*-TITLE` | 구역 제목줄 | 글자 | `ZonePanel` 내부 Label | "n구역", 배경 `C-ZONE-TITLE`, 흰 굵은 글씨 |
+| 4 | `LINE-{코드}` | 라인 패널 | 묶음 | `LinePanel` (`MainWindow.line_panels[코드]`) | 구역 안 왼쪽=짝(E), 오른쪽=홀(O) |
+| 4 | `LINE-*-SIDE` | 짝/홀 표시 띠 | 글자 | `LinePanel` 내부 | 짝=주황(`C-SIDE-EVEN`), 홀=파랑(`C-SIDE-ODD`) |
+| 5 | `LINE-*-DOT-OLD` | 기존모터 통신상태 점 | 상태 점 | `LinePanel.rec_SOURCE_NETSTATUS` | 4.1절 색상 규칙 |
+| 5 | `LINE-*-LBL-OLD` | 기존모터 IP/PORT | 글자 | `LinePanel.lbl_old_ip` | "IP/PORT" 예) `192.168.0.1/502`. 폭이 좁아 잘리면 마우스를 올려 전체 문구 확인 |
+| 6 | `LINE-*-DOT-NEW` | 신규모터 통신상태 점 | 상태 점 | `LinePanel.rec_TARGET_NETSTATUS` | 4.1절 색상 규칙 |
+| 6 | `LINE-*-LBL-NEW` | 신규모터 IP/PORT | 글자 | `LinePanel.lbl_new_ip` | "IP/PORT" (잘리면 툴팁) |
+| 7 | `LINE-*-DOT-REF` | RPM 소스 상태 점 | 상태 점 | `LinePanel.rec_SID_NETSTATUS` | 수동이면 항상 정상, 참조이면 참조 기존모터가 '정상'일 때만 정상 |
+| 7 | `LINE-*-LBL-REF` | RPM 소스 문구 | 글자 | `LinePanel.lbl_source` | 수동: `수동 > 800 RPM` / 참조: `1구역 > 짝 > 5` (구역 > 짝홀 > 모터ID) (잘리면 툴팁) |
+| 8 | `LINE-*-BTN-SET` | 설정 버튼(톱니) | 그림 버튼 | `LinePanel.Btn_Settings` | 클릭 → `DLG-LINE`. 툴팁 "설정" |
+| 9 | `LINE-*-BTN-ADD` | 추가 버튼(+) | 그림 버튼 | `LinePanel.Btn_Add` | 클릭 → `DLG-MOTOR`(ADD). 툴팁 "추가" |
+| 10 | `LINE-*-LIST-HDR` | 모터 목록 머리글 | 머리글 | `MotorListView.header` | 열 머리글 클릭 시 정렬 (3.2절) |
+| 11 | `LINE-*-LIST` | 모터 목록 | 목록 | `LinePanel.LV` (`MotorListView`) | 3.2절 |
 
 ### 3.2 `LINE-*-LIST` 모터 목록
 
 | ID | 이름 | 폭 | 내용 | 머리글 클릭(정렬 기준) |
 |---|---|---|---|---|
 | `COL-TYPE` | 종류 열 (머리글 빈칸) | 35px | 기존모터 그림(회색 팬) / 신규모터 그림(녹색 팬), 툴팁 "기존모터"/"신규모터" | 종류 (`MTYPE`) |
-| `COL-ID` | ID 열 | 60px | 모터 ID | ID |
+| `COL-ID` | ID 열 | 60px (목록 폭 200px 미만이면 40px) | 모터 ID | ID |
 | `COL-STATUS` | 상태 열 | 나머지 | 상태 그림 + 오른쪽 정렬 문구 (아래 표) | 상태 코드 |
 
 **상태 표시 규칙 (`COL-STATUS`)**
@@ -119,14 +127,14 @@
 | 번호 | ID | 이름 | 종류 | 코드 객체 | 초기값 / 동작 |
 |---|---|---|---|---|---|
 | 1 | `DLG-LINE-TITLE` | 창 제목줄 "라인설정" | 제목줄 | `header`, `title_label` | 배경 `C-DLG-LINE`. 끌어서 창 이동 |
-| 2 | `DLG-LINE-LBL-HOUSE` | 위치 | 글자 | `lbl_house` | 예) `온실1 / 1구역 / 짝` |
+| 2 | `DLG-LINE-LBL-HOUSE` | 위치 | 글자 | `lbl_house` | 예) `1구역 / 짝`, `5구역 / 홀` |
 | 3 | `DLG-LINE-TXT-SIP` | 기존모터 IP | 입력칸 | `txtSIP` | 현재 설정값 |
 | 4 | `DLG-LINE-TXT-SPORT` | 기존모터 PORT | 입력칸 | `txtSPORT` | 현재 설정값 |
 | 5 | `DLG-LINE-TXT-TIP` | 신규모터 IP | 입력칸 | `txtTIP` | 현재 설정값 |
 | 6 | `DLG-LINE-TXT-TPORT` | 신규모터 PORT | 입력칸 | `txtTPORT` | 현재 설정값 |
 | 7 | `DLG-LINE-RB-MANUAL` | RPM 제어 소스: 수동 | 라디오 | `rb_source_manual` | 선택 시 `DLG-LINE-ROW-MANUAL` 표시 |
 | 8 | `DLG-LINE-RB-REF` | RPM 제어 소스: 기존모터 | 라디오 | `rb_source_ref` | 선택 시 `DLG-LINE-ROW-REF` 표시 |
-| 9 | `DLG-LINE-CB-LINE` | 참조 라인 선택 | 콤보 | `cb_lines` (`DLG-LINE-ROW-REF` 안) | 항목: 라인 / 1구역/짝 … 4구역/홀 (같은 온실 안). 바꾸면 `CB-ID` 목록 다시 채움 |
+| 9 | `DLG-LINE-CB-LINE` | 참조 라인 선택 | 콤보 | `cb_lines` (`DLG-LINE-ROW-REF` 안) | 항목: 라인 / 1구역/짝 … 8구역/홀 (**전체 8개 구역**에서 선택 가능). 바꾸면 `CB-ID` 목록 다시 채움 |
 | 10 | `DLG-LINE-CB-ID` | 참조 모터 ID 선택 | 콤보 | `cb_ids` | 첫 항목 "ID" + 선택 라인의 **기존모터** ID (등록 순서) |
 | 11 | `DLG-LINE-BTN-SAVE` | 저장 | 버튼(진청) | `BtnSave` | 검증 → 저장 → 메인 화면 머리 영역 갱신 → 닫기. Enter 키 |
 | 12 | `DLG-LINE-BTN-CANCEL` | 취소 | 버튼(회색) | `BtnCancel` | 저장 없이 닫기. Esc 키 |
@@ -153,7 +161,7 @@
 | 14 | (기존모터) 참조 ID 미선택 | `MSG-LINE-14` |
 | 15 | 소스 미선택 | `MSG-LINE-15` |
 
-**저장 값**: 수동 모드에서도 선택된 참조 라인/ID 를 함께 저장(ID 미선택 시 -1). 기존모터 모드에서는 수동 RPM 칸 값을 정수로 읽을 수 있으면 저장, 아니면 0. 참조 라인은 `온실코드 + 선택값` (예: `H1` + `R2O` = `H1R2O`).
+**저장 값**: 수동 모드에서도 선택된 참조 라인/ID 를 함께 저장(라인 미선택 시 빈 값, ID 미선택 시 -1). 기존모터 모드에서는 수동 RPM 칸 값을 정수로 읽을 수 있으면 저장, 아니면 0. 참조 라인은 선택한 라인 코드 그대로 저장 (예: 5구역/짝 → `H2R1E`).
 저장된 IP/PORT 는 **다음 접속 시도부터** 적용됩니다(제어 중이어도 재시작 불필요, 단 현재 연결이 끊겨야 새 주소로 접속).
 
 ### 3.4 `DLG-MOTOR` 모터 추가 / 수정·삭제 창
@@ -163,7 +171,7 @@
 | 번호 | ID | 이름 | 종류 | 코드 객체 | 모드 | 동작 |
 |---|---|---|---|---|---|---|
 | 1 | `DLG-MOTOR-TITLE` | 창 제목줄 | 제목줄 | `header`, `title_label` | 공통 | ADD: "모터 추가" / MOD: "모터 수정/삭제". 배경 `C-DLG-MOTOR`. 끌어서 이동 |
-| 2 | `DLG-MOTOR-LBL-HOUSE` | 위치 | 글자 | `lbl_house` | 공통 | 예) `온실1 / 1구역 / 짝` |
+| 2 | `DLG-MOTOR-LBL-HOUSE` | 위치 | 글자 | `lbl_house` | 공통 | 예) `1구역 / 짝` |
 | 3 | `DLG-MOTOR-RB-OLD` | 모터종류: 기존모터 | 라디오 | `rb_oldmotor` | ADD | 처음엔 선택 없음 |
 | 4 | `DLG-MOTOR-RB-NEW` | 모터종류: 신규모터 | 라디오 | `rb_newmotor` | ADD | 처음엔 선택 없음 |
 | 5 | `DLG-MOTOR-TXT-ID` | 모터ID 입력 | 입력칸 | `txtID` | ADD | 옆에 `정수(1~99)` 안내 |
@@ -193,10 +201,12 @@
 | ID | 제목 | 문구 | 버튼 | 발생 위치 |
 |---|---|---|---|---|
 | `MSG-MAIN-01` | BLDC MOTOR MONITOR | 모니터가 이미 실행중입니다. | 확인 | 프로그램 중복 실행 (후 종료) |
-| `MSG-MAIN-02` | 제어 | 온실1 제어를 시작하시겠습니까? | 예/아니오 | `MAIN-BTN-H1-START` |
-| `MSG-MAIN-03` | 제어 | 온실1 제어를 종료하시겠습니까? | 예/아니오 | `MAIN-BTN-H1-STOP` |
+| `MSG-MAIN-02` | 제어 | 1~4구역 제어를 시작하시겠습니까? | 예/아니오 | `MAIN-BTN-H1-START` |
+| `MSG-MAIN-03` | 제어 | 1~4구역 제어를 종료하시겠습니까? | 예/아니오 | `MAIN-BTN-H1-STOP` |
 | `MSG-MAIN-04` | 종료 | 종료하시겠습니까? 종료시 제어기능이 동작하지 않습니다. | 예/아니오 | 메인 창 닫기(X) |
 | `MSG-MAIN-05` | 오류 | 설정 저장에 실패했습니다. (+오류내용) | 확인 | 종료 시 Config.ini 저장 실패 (신규) |
+| `MSG-MAIN-06` | 제어 | 5~8구역 제어를 시작하시겠습니까? | 예/아니오 | `MAIN-BTN-H2-START` |
+| `MSG-MAIN-07` | 제어 | 5~8구역 제어를 종료하시겠습니까? | 예/아니오 | `MAIN-BTN-H2-STOP` |
 | `MSG-LINE-01` | 에러 | 기존모터 접속 IP를 입력해 주세요. | 확인 | `DLG-LINE` 저장 |
 | `MSG-LINE-02` | 에러 | 기존모터 접속 IP가 올바른 형식이 아닙니다.. | 확인 | 〃 |
 | `MSG-LINE-03` | 에러 | 기존모터 접속 PORT를 입력해 주세요. | 확인 | 〃 |
@@ -231,7 +241,7 @@
 
 | 조건 | `DOT-OLD` | `DOT-NEW` | `DOT-REF` |
 |---|---|---|---|
-| 해당 온실 제어 중지 상태 | 회색 `C-NET-STOP` | 회색 | 회색 |
+| 해당 구역 묶음(1~4 / 5~8) 제어 중지 상태 | 회색 `C-NET-STOP` | 회색 | 회색 |
 | 제어 중 + 정상 | 파랑 `C-NET-OK` (기존모터 게이트웨이 접속됨) | 파랑 (신규모터 게이트웨이 접속됨) | 파랑 (수동 모드이거나, 참조 기존모터 상태가 '정상') |
 | 제어 중 + 이상 | 빨강 `C-NET-ERR` (접속 실패/끊김) | 빨강 | 빨강 (참조 모터가 이상/대기/중지/없음) |
 
@@ -245,9 +255,10 @@
 | 사용 중 + 마지막 수신 후 60초 미만 | 0 정상 |
 
 - 기존모터: RPM 읽기 응답을 받을 때마다 RPM·수신시각 갱신.
-- 신규모터: 원본과 같이 수신시각을 갱신하지 않으므로 **항상 '대기'** 로 보입니다 (`P-NEW-STATUS` 로 변경 가능, 6장 Q2).
+- 신규모터(v1.1.0~): 상태 읽기 응답을 받을 때마다 RPM·수신시각 갱신 → 기존모터와 같은 규칙으로 정상/이상/대기 표시 (`P-NEW-STATUS`=True).
+  표시 RPM 은 신규모터 **레지스터 0x16 값**(제어기가 RPM 으로 보고하는 값)이며, 제어로 값을 써넣은 직후에는 다음 읽기(약 수 초 후)에 반영됩니다.
 
-### 4.3 제어 흐름 (라인 1개 기준, `MAIN-BTN-H1-START` 후)
+### 4.3 제어 흐름 (라인 1개 기준, `MAIN-BTN-H1-START` / `MAIN-BTN-H2-START` 후)
 
 ```
 [기존모터 송신 쓰레드]                       [신규모터 송신 쓰레드]
@@ -260,7 +271,7 @@
     RPM 읽기 명령 적재 후 1초 대기                 '중지로 바뀐 신규모터' 는 RPM 0 쓰기 1회 적재, 1초 대기
 
 [기존모터 수신]  응답(11바이트, FC04) → 해당 모터 RPM, 수신시각 갱신
-[신규모터 수신]  응답(23바이트, FC03) → 목표 RPM 결정
+[신규모터 수신]  응답(23바이트, FC03) → RPM·수신시각 갱신(화면 표시) → 목표 RPM 결정
                   · 수동 모드: 수동RPM값
                   · 참조 모드: 참조 기존모터 상태가 '정상'이면 그 RPM, 아니면 이번 응답은 제어하지 않음
                  자동/수동 레지스터 ≠ 1 → '수동(1)' 쓰기 적재
@@ -291,8 +302,8 @@
 | `P-CMD-IDX-MAX` | 트랜잭션 번호 최대 | `CMD_IDX_MAX` | 9999 | 초과 시 0 |
 | `P-DEFAULT-PORT` | 기본 포트 | `DEFAULT_PORT` | 502 | |
 | `P-DEFAULT-IP` | 기본 IP | `DEFAULT_IP_PREFIX` | 192.168.0.x | 라인 순서 n(0부터)에 대해 기존=2n+1, 신규=2n+2 |
-| `P-H2-CONTROL` | 온실2 제어 버튼 동작 | `H2_CONTROL_ENABLED` | False | 원본: 동작 안 함 |
-| `P-NEW-STATUS` | 신규모터 상태 표시 | `NEW_MOTOR_STATUS_TRACKING` | False | 원본: 신규모터 항상 '대기' |
+| `P-H2-CONTROL` | 5~8구역 제어 버튼 동작 | `H2_CONTROL_ENABLED` | True | 원본은 False(동작 안 함). v1.1.0 에서 활성화 |
+| `P-NEW-STATUS` | 신규모터 상태 표시 | `NEW_MOTOR_STATUS_TRACKING` | True | 원본은 False(항상 '대기'). v1.1.0 에서 활성화 |
 | `P-DEBUG` | 상세 로그 대상 | `DEBUG_LINE`, `DEBUG_IDS` (house.py) | "ALL", {5, 50} | `--debug` 실행 시 패킷 로그 범위 |
 
 ---
@@ -301,8 +312,6 @@
 
 | ID | 상수 | 값 | 사용처 |
 |---|---|---|---|
-| `C-TAB-SEL` | `TAB_SELECTED` | `#16a085` | 선택된 탭 |
-| `C-TAB` | `TAB_UNSELECTED` | `#d3d3d3` | 선택 안 된 탭 |
 | `C-ZONE-TITLE` | `ZONE_TITLE_BG` | `#34495e` | `ZONE-*-TITLE` |
 | `C-SIDE-EVEN` | `SIDE_EVEN_BG` | `#f39c12` | 짝 띠 |
 | `C-SIDE-ODD` | `SIDE_ODD_BG` | `#2980b9` | 홀 띠 |
@@ -328,7 +337,7 @@
 ## 7. 데이터 사양
 
 ### 7.1 라인 코드 / 모터 키
-- 라인 16개: `H1R1E, H1R1O, H1R2E, … H1R4O, H2R1E, … H2R4O` (온실2 8개는 화면이 없어 설정·제어 불가, 원본 동일)
+- 라인 16개: `H1R1E, H1R1O, H1R2E, … H1R4O, H2R1E, … H2R4O` — 화면에서는 1~8구역(1.1절 대응표)
 - 모터 고유 키: `{종류}_{ID}` (종류 0=기존, 1=신규) 예) `0_5`, `1_10`. 같은 라인에 같은 ID 라도 종류가 다르면 별개 모터.
 
 ### 7.2 설정 파일 `Config.ini` (실행 폴더, 원본과 형식 호환)
@@ -373,7 +382,7 @@ H1R1E_MOTORS=10=1=1,5=0=1        ; ID=종류=사용(1/0), 쉼표로 구분, 화�
 
 ## 9. 원본과의 차이
 
-### 9.1 의도적으로 바꾼 점 (안전성·안정성)
+### 9.1 의도적으로 바꾼 점
 
 | ID | 내용 | 원본 동작 | 변경 동작 | 위치 |
 |---|---|---|---|---|
@@ -386,21 +395,24 @@ H1R1E_MOTORS=10=1=1,5=0=1        ; ID=종류=사용(1/0), 쉼표로 구분, 화�
 | D7 | 중복 실행 확인 | 같은 이름 프로세스 검사 | 잠금 파일 검사 | `runtime.py` |
 | D8 | 로그 | 디버그 창 출력만 | 로그 파일 추가, `--debug` 옵션 | `runtime.py`, `app.py` |
 | D9 | 설정 저장 | Windows INI API | 임시파일 후 교체(저장 중 전원 차단 시 손상 방지), UTF-8 | `config.py` |
+| D10 | 화면 구성 (v1.1.0, 사용자 요청) | 온실1/온실2 탭으로 분리, 온실2 탭 비어 있음 | 탭 없이 한 화면에 1~8구역(4열×2행), 온실2 = 5~8구역 | `main_window.py` |
+| D11 | 5~8구역 제어 (v1.1.0, 사용자 요청) | 온실2 제어 버튼 동작 안 함 | 동작함 (`P-H2-CONTROL`) | `constants.py` |
+| D12 | 신규모터 상태 (v1.1.0, 사용자 요청) | 항상 '대기' | RPM·정상/이상 표시 (`P-NEW-STATUS`) | `house.py` `_handle_tgt_frame` |
+| D13 | 참조 라인 선택 범위 (v1.1.0) | 같은 온실의 4개 구역 | 전체 1~8구역 | `dialogs.py` `LINE_CHOICES` |
+| D14 | 구역 이름 표시 (v1.1.0) | `온실1 / 1구역 / 짝` | `1구역 / 짝` (온실2는 5~8구역) | `helpers.py` |
 
 ### 9.2 화면 기술 차이 (WPF → tkinter)
+- 원본 탭 머리(온실1/온실2)는 v1.1.0 에서 제거.
 - 대화상자 둥근 모서리/투명 배경은 사각형으로 표시. Windows 에서는 원본처럼 제목표시줄 없는 창(머리글 끌어 이동), 그 외 OS 는 일반 창.
 - 목록은 데이터 바인딩 대신 0.3초 주기 변경 확인으로 갱신.
 - 원본의 숨겨진 시험용 버튼 3개(높이 0 행, "test")는 화면에 보이지 않으므로 옮기지 않음.
 
-### 9.3 원본 그대로 유지한 점 (확인 필요 — 11장)
+### 9.3 원본 그대로 유지한 점
 
 | ID | 내용 |
 |---|---|
-| Q1 | 온실2 탭은 비어 있고 온실2 제어 버튼은 동작하지 않음 (`P-H2-CONTROL`) |
-| Q2 | 신규모터는 응답을 받아도 상태가 항상 '대기' (`P-NEW-STATUS`) |
 | Q3 | '대기' 상태에는 상태 그림이 없음 |
 | Q4 | 상태 정렬은 클릭 시점 기준(상태 변화 시 자동 재정렬 없음) |
-| Q5 | 수동 모드 저장 시 참조 라인 미선택이면 참조 라인이 `H1` 로 저장됨(동작 영향 없음) |
 | Q6 | 제어를 종료해도 상태 판정은 계속되어, 종료 60초 후 기존모터가 '이상' 으로 표시 |
 | Q7 | 참조 모터 상태는 5초마다 판정하므로 제어 시작 직후 최대 5초간 참조 모드 라인은 제어 보류 |
 
@@ -414,7 +426,7 @@ H1R1E_MOTORS=10=1=1,5=0=1        ; ID=종류=사용(1/0), 쉼표로 구분, 화�
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행 확인, 설정 읽기, 메인 창) | `Application.xaml`, `MainWindow_Loaded` |
 | `motor_monitor/constants.py` | 상수(5장) | `M_Variables.vb` |
 | `motor_monitor/config.py` | Config.ini 읽기/쓰기 | `M_Config.vb` |
-| `motor_monitor/helpers.py` | 라인명 변환, IP/정수 검사 | `M_Functions.vb` |
+| `motor_monitor/helpers.py` | 구역번호(1~8)·라인명 변환, IP/정수 검사 | `M_Functions.vb` |
 | `motor_monitor/modbus.py` | Modbus 프레임 생성/해석 | `C_HOUSE.vb` modbus_function |
 | `motor_monitor/house.py` | 라인별 모터 관리·정렬·상태·통신 쓰레드 | `C_HOUSE.vb`, `C_LIST_BIND_Data.vb` |
 | `motor_monitor/plant.py` | 전체 라인/설정 묶음, 제어 시작/종료 | `M_Variables.vb` HOUSES/MCONFIG |
@@ -422,9 +434,9 @@ H1R1E_MOTORS=10=1=1,5=0=1        ; ID=종류=사용(1/0), 쉼표로 구분, 화�
 | `motor_monitor/simulator.py` | 장비 없이 시험하는 가상 게이트웨이 | – |
 | `motor_monitor/ui/main_window.py` | `SCR-MAIN`, `ZONE-`, `LINE-` | `MainWindow.xaml(.vb)` |
 | `motor_monitor/ui/dialogs.py` | `DLG-LINE`, `DLG-MOTOR` | `wHOUSE.xaml(.vb)`, `wMotor.xaml(.vb)` |
-| `motor_monitor/ui/widgets.py` | 버튼, 상태 점, 탭, 툴팁, 모터 목록 | `Application.xaml`/`MainWindow.xaml` 템플릿 |
+| `motor_monitor/ui/widgets.py` | 버튼, 상태 점, 툴팁, 모터 목록 | `Application.xaml`/`MainWindow.xaml` 템플릿 |
 | `motor_monitor/ui/theme.py` | 색상·글꼴·그림(6장) | XAML 색상값 |
-| `tests/` | 자동 시험 (로직 20개 + 화면 4개) | – |
+| `tests/` | 자동 시험 (로직 21개 + 화면 5개) | – |
 | `tools/make_screenshots.py`, `tools/annotate_screenshots.py` | 문서용 화면 캡처/번호 표시 | – |
 
 ---
@@ -433,10 +445,11 @@ H1R1E_MOTORS=10=1=1,5=0=1        ; ID=종류=사용(1/0), 쉼표로 구분, 화�
 
 | 번호 | 질문 | 현재 처리 |
 |---|---|---|
-| 1 | 온실2 화면(4개 구역)과 제어 버튼을 활성화할까요? (Q1) | 원본대로 비활성 |
-| 2 | 신규모터도 응답 수신 시 RPM/정상·이상을 표시할까요? (Q2) | 원본대로 항상 '대기' |
-| 3 | D1~D9 변경 중 원본 동작으로 되돌릴 항목이 있나요? | 변경 적용 |
-| 4 | 메시지 문구의 맞춤법을 고칠까요? ("종류을", "여부을", "아닙니다..") | 원본 유지 |
+| 1 | D1~D9 변경 중 원본 동작으로 되돌릴 항목이 있나요? | 변경 적용 |
+| 2 | 메시지 문구의 맞춤법을 고칠까요? ("종류을", "여부을", "아닙니다..") | 원본 유지 |
+| 3 | 신규모터 표시 RPM(레지스터 0x16)이 실제 회전수인지, 설정값인지 장비 자료로 확인 필요 | 원본 변수명(NOW_RPM)대로 현재 RPM 으로 표시 |
+
+해결된 항목: (v1.1.0) 온실2 화면/제어 → 한 화면 1~8구역으로 해결, 신규모터 상태 표시 → 적용.
 
 ---
 
@@ -445,3 +458,4 @@ H1R1E_MOTORS=10=1=1,5=0=1        ; ID=종류=사용(1/0), 쉼표로 구분, 화�
 | 버전 | 날짜 | 변경 내용 | 관련 ID |
 |---|---|---|---|
 | 1.0.0 | 2026-10-13 | VB.NET 원본을 파이썬으로 최초 이식. 화면 3종, 통신/제어, 설정 파일 호환, 사용자 매뉴얼·스펙시트 작성 | 전체 |
+| 1.1.0 | 2026-10-13 | 온실 탭 제거, 한 화면에 1~8구역(4열×2행) 표시. 온실2 → 5~8구역, 5~8구역 제어 버튼 활성화. 신규모터 RPM·상태 표시. 참조 라인 선택을 8개 구역 전체로 확대. 구역 이름 표기 변경. 좁은 화면 대응(머리 문구 툴팁, ID 열 축소) | `SCR-MAIN`, `MAIN-TAB-*`(삭제), `MAIN-BTN-H1/H2-*`, `ZONE-1~8`, `LINE-*-LBL-*`, `COL-ID`, `COL-STATUS`, `DLG-LINE-CB-LINE`, `*-LBL-HOUSE`, `MSG-MAIN-02/03/06/07`, `P-H2-CONTROL`, `P-NEW-STATUS`, D10~D14 |

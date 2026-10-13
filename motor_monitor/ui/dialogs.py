@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
-from ..constants import MAX_RPM, MOTOR_ID_MAX, MOTOR_ID_MIN, MotorType
+from ..constants import HOUSE_LINES, MAX_RPM, MOTOR_ID_MAX, MOTOR_ID_MIN, MotorType
 from ..helpers import check_integer, check_valid_ip, get_house_name
 from ..house import motor_key
 from . import theme as T
@@ -131,13 +131,9 @@ class BaseDialog(tk.Toplevel):
 
 
 # ======================================================================== 라인설정 창
-LINE_CHOICES: List[Tuple[str, str]] = [
-    ("", "라인"),
-    ("R1E", "1구역/짝"), ("R1O", "1구역/홀"),
-    ("R2E", "2구역/짝"), ("R2O", "2구역/홀"),
-    ("R3E", "3구역/짝"), ("R3O", "3구역/홀"),
-    ("R4E", "4구역/짝"), ("R4O", "4구역/홀"),
-]
+# 참조 라인 선택 항목: 1구역/짝 ~ 8구역/홀 (값은 라인 코드 전체, 예: H2R1E = 5구역/짝)
+LINE_CHOICES: List[Tuple[str, str]] = [("", "라인")] + [
+    (code, get_house_name(code, "/")) for code in HOUSE_LINES]
 
 
 class LineSettingsDialog(BaseDialog):
@@ -148,7 +144,6 @@ class LineSettingsDialog(BaseDialog):
         super().__init__(owner, "라인설정", T.LINE_DIALOG_HEADER, 400, 300)
         self.plant = plant
         self.house_code = house_code
-        self.house_header = house_code[:2]
         self.on_saved = on_saved
         self._id_tags: List[str] = []
 
@@ -199,7 +194,7 @@ class LineSettingsDialog(BaseDialog):
                  font=T.font(9, bold=True)).place(x=10, rely=0.5, anchor="w")
         inner = tk.Frame(self.ref_line, bg=T.WHITE)
         inner.place(x=120, rely=0.5, anchor="w")
-        self.cb_lines = ttk.Combobox(inner, state="readonly", width=10, font=T.font(11, bold=True),
+        self.cb_lines = ttk.Combobox(inner, state="readonly", width=10, height=len(LINE_CHOICES), font=T.font(11, bold=True),
                                      values=[name for _, name in LINE_CHOICES])
         self.cb_lines.pack(side="left")
         self.cb_lines.bind("<<ComboboxSelected>>", lambda e: self._on_line_changed())
@@ -229,10 +224,9 @@ class LineSettingsDialog(BaseDialog):
             e.insert(0, str(v))
 
         source_line = cfg.source_line or self.house_code
-        if len(source_line) == 5:
-            tline = source_line[2:5]
-            self._select_line(tline)
-            self._load_old_ids(self.house_header + tline, str(cfg.source_id))
+        if source_line in HOUSE_LINES:
+            self._select_line(source_line)
+            self._load_old_ids(source_line, str(cfg.source_id))
         else:
             self._select_line("")
             self._load_old_ids(None)
@@ -268,7 +262,7 @@ class LineSettingsDialog(BaseDialog):
 
     def _on_line_changed(self) -> None:
         tag = self._line_tag()
-        self._load_old_ids(self.house_header + tag if tag else None)
+        self._load_old_ids(tag or None)
 
     def _on_mode(self) -> None:
         if self.source_mode.get() == "manual":
@@ -335,7 +329,6 @@ class LineSettingsDialog(BaseDialog):
         else:
             return self.error("RPM제어 소스를 선택해주세요.", "에러")
 
-        sline = self.house_header + sline
         cfg = self.plant.configs[self.house_code].copy(
             source_ip=sip, source_port=sport, target_ip=tip, target_port=tport,
             source_manual=smanual, manual_rpm=mrpm, source_line=sline, source_id=sid)

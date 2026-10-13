@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import tkinter as tk
-from typing import Callable, List, Optional, Sequence
+from typing import Callable, List, Optional
 
 from ..constants import MotorStatus, MotorType
 from ..house import Motor
@@ -188,38 +188,6 @@ class DottedSeparator(tk.Canvas):
         self.create_line(self._padx, 0, e.width - self._padx, 0, fill=T.SEPARATOR, dash=(1, 2))
 
 
-class TabBar(tk.Frame):
-    """원본 TabControl 의 탭 머리 (선택: #16a085 흰 굵은 글씨 / 비선택: LightGray)."""
-
-    def __init__(self, master, titles: Sequence[str], on_select: Callable[[int], None]) -> None:
-        super().__init__(master, bg=master.cget("bg"))
-        self._tabs: List[tk.Canvas] = []
-        self._titles = list(titles)
-        self._on_select = on_select
-        self.selected = 0
-        for i, t in enumerate(titles):
-            c = tk.Canvas(self, width=100, height=30, highlightthickness=0, bg=self.cget("bg"), cursor="hand2")
-            c.pack(side="left", padx=(0, 0))
-            c.bind("<Button-1>", lambda e, i=i: self.select(i))
-            self._tabs.append(c)
-        self._draw()
-
-    def select(self, idx: int) -> None:
-        self.selected = idx
-        self._draw()
-        self._on_select(idx)
-
-    def _draw(self) -> None:
-        for i, c in enumerate(self._tabs):
-            c.delete("all")
-            sel = i == self.selected
-            # 모서리: 왼쪽위 2, 오른쪽위 12
-            c.create_polygon(0, 30, 0, 2, 2, 0, 88, 0, 100, 12, 100, 30, smooth=False,
-                             fill=T.TAB_SELECTED if sel else T.TAB_UNSELECTED, outline="")
-            c.create_text(50, 16, text=self._titles[i], fill=T.WHITE if sel else T.TEXT,
-                          font=T.font(9, bold=sel))
-
-
 # ------------------------------------------------------------------ 모터 목록
 class MotorListView(tk.Frame):
     """라인별 모터 목록 (원본 ListView + GridView).
@@ -290,9 +258,13 @@ class MotorListView(tk.Frame):
         return self._selected_key
 
     # --- 그리기 ---
+    NARROW_WIDTH = 200   # 목록 폭이 이보다 좁으면 ID 열을 줄여 상태 열 확보
+    COL1_NARROW = 40
+
     def _col_x(self):
         w = self._width
-        return 0, self.COL0, self.COL0 + self.COL1, w
+        c1 = self.COL1 if w >= self.NARROW_WIDTH else self.COL1_NARROW
+        return 0, self.COL0, self.COL0 + c1, w
 
     def _on_resize(self, e) -> None:
         # 원본 ListView_SizeChanged: 0열 35, 1열 60, 2열 = 나머지

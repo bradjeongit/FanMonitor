@@ -1,7 +1,7 @@
 """매뉴얼/스펙시트용 화면 캡처 (시뮬레이터 연결 상태로 화면을 띄워 캡처).
 
 사용법(리눅스, Xvfb/ImageMagick 필요):
-  xvfb-run -a -s "-screen 0 1400x900x24" python tools/make_screenshots.py docs/images
+  xvfb-run -a -s "-screen 0 1920x1080x24" python tools/make_screenshots.py docs/images
   python tools/annotate_screenshots.py docs/images
 """
 import json
@@ -50,26 +50,29 @@ h2.add_motor(21, MotorType.NEW_MOTOR, False)
 plant.configs["H1R1O"] = plant.configs["H1R1O"].copy(
     source_ip=old.host, source_port=old.port, target_ip=new.host, target_port=new.port,
     source_manual=True, manual_rpm=800)
-for code in ("H1R2E", "H1R3O", "H1R4E"):
+for code in ("H1R2E", "H1R3O", "H1R4E", "H2R1E", "H2R2O", "H2R4E"):
     plant.houses[code].add_motor(1, MotorType.OLD_MOTOR, True)
     plant.houses[code].add_motor(2, MotorType.NEW_MOTOR, True)
 plant.save()
 
+W, H = (int(v) for v in os.environ.get("SHOT_SIZE", "1920x1040").split("x"))
 root = tk.Tk()
 win = MainWindow(root, plant)
-root.geometry("1280x820+0+0")
+root.geometry(f"{W}x{H}+0+0")
 
 
 def snap(name, window_id=None):
     root.update()
     target = "root"
-    subprocess.run(["import", "-window", target, "-crop", "1280x820+0+0" if name.startswith("main") else "+0+0",
+    subprocess.run(["import", "-window", target, "-crop", f"{W}x{H}+0+0" if name.startswith("main") else "+0+0",
                     os.path.join(OUT, name + ".png")], check=True)
 
 
 def start():
     plant.start_house("H1")
     win._show_ctrl("H1", True)
+    plant.start_house("H2")
+    win._show_ctrl("H2", True)
     win.update_network_status()
 
 
@@ -86,12 +89,11 @@ def main_shot():
     lp = win.line_panels["H1R1E"]
     zone = lp.master.master
     items = [
-        ("1", win.house_tab._tabs[0]), ("2", win.house_tab._tabs[1]),
-        ("3", win.H1_StopBtn), ("4", win.H2_StartBtn),
-        ("5", zone),
-        ("6", lp), ("7", lp.rec_SOURCE_NETSTATUS.master), ("8", lp.rec_TARGET_NETSTATUS.master),
-        ("9", lp.rec_SID_NETSTATUS.master), ("10", lp.Btn_Settings), ("11", lp.Btn_Add),
-        ("12", lp.LV.header), ("13", lp.LV.canvas),
+        ("1", win.H1_StopBtn), ("2", win.H2_StopBtn),
+        ("3", zone),
+        ("4", lp), ("5", lp.rec_SOURCE_NETSTATUS.master), ("6", lp.rec_TARGET_NETSTATUS.master),
+        ("7", lp.rec_SID_NETSTATUS.master), ("8", lp.Btn_Settings), ("9", lp.Btn_Add),
+        ("10", lp.LV.header), ("11", lp.LV.canvas),
     ]
     MARKS["main_running"] = [(n, bbox(w)) for n, w in items]
     root.after(100, line_dialog)
@@ -148,6 +150,8 @@ def motor_mod():
 def stopped():
     plant.stop_house("H1")
     win._show_ctrl("H1", False)
+    plant.stop_house("H2")
+    win._show_ctrl("H2", False)
     win.update_network_status()
     root.after(300, lambda: (snap("main_stopped"), finish()))
 

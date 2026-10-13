@@ -21,14 +21,15 @@ MAX_RPM = 1100
 MOTOR_ID_MIN = 1
 MOTOR_ID_MAX = 99
 
-# 온실2 제어 시작/종료 버튼 활성 여부.
-# 원본은 H2_StartBtn_Click / H2_StopBtn_Click 첫 줄이 'Exit Sub' 이라 버튼을 눌러도 아무 동작을 하지 않음.
-H2_CONTROL_ENABLED = False
+# 5~8구역(온실2) 제어 시작/종료 버튼 활성 여부.
+# 원본은 H2_StartBtn_Click / H2_StopBtn_Click 첫 줄이 'Exit Sub' 이라 동작하지 않았음.
+# v1.1.0 부터 1~8구역을 한 화면에서 운영하므로 활성화.
+H2_CONTROL_ENABLED = True
 
 # 신규모터 상태 표시 여부.
 # 원본은 신규모터 읽기 응답을 받아도 수신일시(RDate)/RPM을 갱신하지 않아 신규모터는 항상 '대기'로 표시됨.
-# True로 바꾸면 응답 수신 시 RPM/수신일시를 갱신해 정상/이상 판정을 받는다(제어 동작에는 영향 없음).
-NEW_MOTOR_STATUS_TRACKING = False
+# True: 응답 수신 시 RPM(레지스터 0x16 값)/수신일시를 갱신해 정상/이상 판정 (v1.1.0 부터 적용, 제어 동작 영향 없음).
+NEW_MOTOR_STATUS_TRACKING = True
 
 # ---- 타이밍(초) ----
 STATUS_UPDATE_INTERVAL = 5      # 모터 상태 갱신 주기 (C_HOUSE.TMR_STATUS_UPDATER)

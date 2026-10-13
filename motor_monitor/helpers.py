@@ -15,20 +15,25 @@ def _is_line_code(code: str) -> bool:
     )
 
 
+def zone_number(house_code: str) -> int:
+    """화면 구역 번호(1~8). 온실1 1~4구역 -> 1~4, 온실2 1~4구역 -> 5~8. 형식이 틀리면 0."""
+    if not _is_line_code(house_code) or not house_code[1].isdigit() or not house_code[3].isdigit():
+        return 0
+    return (int(house_code[1]) - 1) * 4 + int(house_code[3])
+
+
 def get_house_name(house_code: str, sep: str = " / ") -> str:
-    """'H1R2E' -> '온실1 / 2구역 / 짝'"""
-    if not _is_line_code(house_code):
+    """'H2R1E' -> '5구역 / 짝' (화면은 1~8구역 단일 체계로 표시)"""
+    z = zone_number(house_code)
+    if z == 0:
         return ""
     side = "짝" if house_code[4] == "E" else "홀"
-    return f"온실{house_code[1]}{sep}{house_code[3]}구역{sep}{side}"
+    return f"{z}구역{sep}{side}"
 
 
 def get_house_short_name(house_code: str, sep: str = " / ") -> str:
-    """'H1R2E' -> '2구역 / 짝'"""
-    if not _is_line_code(house_code):
-        return ""
-    side = "짝" if house_code[4] == "E" else "홀"
-    return f"{house_code[3]}구역{sep}{side}"
+    """get_house_name 과 같음 (원본 호환용 이름 유지)"""
+    return get_house_name(house_code, sep)
 
 
 def check_valid_ip(ip: str) -> bool:

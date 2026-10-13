@@ -1,8 +1,8 @@
 """메인 화면 (SCR-MAIN). 원본: MainWindow.xaml / MainWindow.xaml.vb
 
-구성
-  상단: 탭(온실1/온실2) + 온실1/온실2 제어 시작·종료 버튼
-  온실1 탭: 2x2 구역 패널(1~4구역), 각 구역은 짝/홀 라인 패널 2개
+구성 (v1.1.0: 원본의 온실1/온실2 탭을 없애고 한 화면에 1~8구역 표시)
+  상단: 1~4구역 / 5~8구역 제어 시작·종료 버튼
+  본문: 4열x2행 구역 패널(윗줄 1~4구역=온실1, 아랫줄 5~8구역=온실2), 각 구역은 짝/홀 라인 패널 2개
   라인 패널: 머리 영역(통신상태 점, IP/PORT, RPM 소스, 설정/추가 버튼) + 모터 목록
 """
 from __future__ import annotations
@@ -13,11 +13,11 @@ from tkinter import messagebox
 from typing import Dict
 
 from .. import constants as C
-from ..helpers import get_house_short_name
+from ..helpers import get_house_short_name, zone_number
 from ..plant import Plant
 from . import theme as T
 from .dialogs import LineSettingsDialog, MotorDialog
-from .widgets import ControlButton, ImageButton, MotorListView, StatusDot, TabBar, Tooltip
+from .widgets import ControlButton, ImageButton, MotorListView, StatusDot, Tooltip
 
 log = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class LinePanel(tk.Frame):
 
         def info_row(r: int, icon, tip: str):
             f = tk.Frame(head, bg=T.WHITE)
-            f.grid(row=r, column=1, sticky="w", padx=(5, 0))
+            f.grid(row=r, column=1, sticky="ew", padx=(5, 0))
             if icon is not None:
                 lb = tk.Label(f, image=icon, bg=T.WHITE, bd=0)
                 Tooltip(lb, tip)
@@ -59,8 +59,10 @@ class LinePanel(tk.Frame):
             lb.pack(side="left")
             dot = StatusDot(f)
             dot.pack(side="left", padx=(5, 0))
-            lbl = tk.Label(f, text="-", bg=T.WHITE, bd=0, font=T.font(9))
-            lbl.pack(side="left", padx=(5, 0))
+            lbl = tk.Label(f, text="-", bg=T.WHITE, bd=0, font=T.font(9), anchor="w")
+            lbl.pack(side="left", padx=(5, 0), fill="x", expand=True)
+            # 화면이 좁아 글자가 잘릴 때를 위해 전체 문구를 툴팁으로 표시
+            Tooltip(lbl, lambda x, y, lbl=lbl: lbl.cget("text"))
             return dot, lbl
 
         self.rec_SOURCE_NETSTATUS, self.lbl_old_ip = info_row(0, img.get("oldmotor", 15), "기존모터")
@@ -107,9 +109,10 @@ class LinePanel(tk.Frame):
 
 
 class ZonePanel(tk.Frame):
-    """구역 1개(GroupBox): 제목줄 + 짝/홀 라인 패널. 스펙시트 ZONE-H{n}R{m}"""
+    """구역 1개(GroupBox): 제목줄 + 짝/홀 라인 패널. 스펙시트 ZONE-{1~8}"""
 
     def __init__(self, master, app: "MainWindow", house: str, zone: int) -> None:
+        """house: 'H1'/'H2', zone: 온실 내 구역번호 1~4 (화면 표시는 1~8구역)"""
         super().__init__(master, bg=T.GROUP_BORDER, padx=1, pady=1)
         inner = tk.Frame(self, bg=T.WHITE, padx=3, pady=3)
         inner.pack(fill="both", expand=True)
@@ -118,7 +121,7 @@ class ZonePanel(tk.Frame):
         inner.rowconfigure(1, weight=1)
         title = tk.Frame(inner, bg=T.ZONE_TITLE_BG)
         title.grid(row=0, column=0, columnspan=2, sticky="ew", pady=3)
-        tk.Label(title, text=f"{zone}구역", bg=T.ZONE_TITLE_BG, fg=T.WHITE,
+        tk.Label(title, text=f"{zone_number(f'{house}R{zone}E')}구역", bg=T.ZONE_TITLE_BG, fg=T.WHITE,
                  font=T.font(9, bold=True)).pack(pady=3)
         self.lines: Dict[str, LinePanel] = {}
         for col, side in enumerate(("E", "O")):
@@ -138,43 +141,43 @@ class MainWindow:
         self.images = T.Images(root)
 
         root.title(C.APP_TITLE)
-        root.minsize(1000, 650)
-        root.geometry("1280x820")
+        root.minsize(1280, 700)
+        root.geometry("1600x900")
+        if T.IS_WINDOWS:
+            try:
+                root.state("zoomed")     # 8개 구역을 넓게 보도록 최대화로 시작
+            except tk.TclError:
+                pass
         root.configure(bg=T.WHITE)
         T.set_window_icon(root)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # --- 상단 탭/제어 버튼 줄 ---
-        top = tk.Frame(root, bg=T.WHITE, height=32)
+        # --- 상단 제어 버튼 줄 ---
+        top = tk.Frame(root, bg=T.WHITE, height=34)
         top.pack(side="top", fill="x", padx=5)
         top.pack_propagate(False)
-        self.house_tab = TabBar(top, ["온실1", "온실2"], self._on_tab)
-        self.house_tab.place(x=0, rely=1.0, anchor="sw")
-
-        self.H1_StartBtn = ControlButton(top, "온실1 제어 시작", "start", self.on_h1_start)
-        self.H1_StopBtn = ControlButton(top, "온실1 제어 종료", "stop", self.on_h1_stop)
-        self.H2_StartBtn = ControlButton(top, "온실2 제어 시작", "start", self.on_h2_start)
-        self.H2_StopBtn = ControlButton(top, "온실2 제어 종료", "stop", self.on_h2_stop)
+        self.H1_StartBtn = ControlButton(top, "1~4구역 제어 시작", "start", self.on_h1_start)
+        self.H1_StopBtn = ControlButton(top, "1~4구역 제어 종료", "stop", self.on_h1_stop)
+        self.H2_StartBtn = ControlButton(top, "5~8구역 제어 시작", "start", self.on_h2_start)
+        self.H2_StopBtn = ControlButton(top, "5~8구역 제어 종료", "stop", self.on_h2_stop)
         self._show_ctrl("H1", running=False)
         self._show_ctrl("H2", running=False)
 
-        # --- 탭 내용 ---
-        self.content = tk.Frame(root, bg=T.GROUP_BORDER, padx=1, pady=1)
-        self.content.pack(side="top", fill="both", expand=True, padx=5, pady=(0, 5))
-        self.pages = []
+        # --- 구역 패널 4열 x 2행 ---
+        self.content = tk.Frame(root, bg=T.WHITE)
+        self.content.pack(side="top", fill="both", expand=True, padx=2, pady=(0, 2))
         self.line_panels: Dict[str, LinePanel] = {}
-
-        page1 = tk.Frame(self.content, bg=T.WHITE)
+        self.zone_panels: Dict[int, ZonePanel] = {}
+        for c in range(4):
+            self.content.columnconfigure(c, weight=1, uniform="c")
         for r in range(2):
-            page1.rowconfigure(r, weight=1, uniform="r")
-            page1.columnconfigure(r, weight=1, uniform="c")
-        for zone in range(1, 5):
-            zp = ZonePanel(page1, self, "H1", zone)
-            zp.grid(row=(zone - 1) // 2, column=(zone - 1) % 2, sticky="nsew", padx=5, pady=5)
-            self.line_panels.update(zp.lines)
-        page2 = tk.Frame(self.content, bg=T.WHITE)   # 원본도 온실2 탭은 비어 있음
-        self.pages = [page1, page2]
-        self._on_tab(0)
+            self.content.rowconfigure(r, weight=1, uniform="r")
+        for row, house in enumerate(("H1", "H2")):
+            for zone in range(1, 5):
+                zp = ZonePanel(self.content, self, house, zone)
+                zp.grid(row=row, column=zone - 1, sticky="nsew", padx=3, pady=3)
+                self.zone_panels[row * 4 + zone] = zp
+                self.line_panels.update(zp.lines)
 
         # --- 초기화 (원본 MainWindow_Loaded) ---
         self.update_header_box()
@@ -205,23 +208,16 @@ class MainWindow:
             lp.refresh(force=force)
 
     # ------------------------------------------------------------ 표시
-    def _on_tab(self, idx: int) -> None:
-        for i, p in enumerate(self.pages):
-            if i == idx:
-                p.pack(fill="both", expand=True)
-            else:
-                p.pack_forget()
-
     def _show_ctrl(self, house: str, running: bool) -> None:
         start = getattr(self, f"{house}_StartBtn")
         stop = getattr(self, f"{house}_StopBtn")
-        x = 250 if house == "H1" else 400
+        x = 0 if house == "H1" else 150
         if running:
             start.place_forget()
-            stop.place(x=x, y=2)
+            stop.place(x=x, y=3)
         else:
             stop.place_forget()
-            start.place(x=x, y=2)
+            start.place(x=x, y=3)
 
     def update_header_box(self) -> None:
         """라인 머리 영역의 IP/PORT, RPM 소스 문구 갱신 (원본 Update_HeaderBox)"""
@@ -261,18 +257,18 @@ class MainWindow:
             self.update_network_status()
 
     def on_h1_start(self) -> None:
-        self._start("H1", "온실1")
+        self._start("H1", "1~4구역")
 
     def on_h1_stop(self) -> None:
-        self._stop("H1", "온실1")
+        self._stop("H1", "1~4구역")
 
     def on_h2_start(self) -> None:
-        if C.H2_CONTROL_ENABLED:      # 원본: 버튼은 보이지만 동작하지 않음
-            self._start("H2", "온실2")
+        if C.H2_CONTROL_ENABLED:      # 원본(v1.0.0 이전): 버튼은 보이지만 동작하지 않음
+            self._start("H2", "5~8구역")
 
     def on_h2_stop(self) -> None:
         if C.H2_CONTROL_ENABLED:
-            self._stop("H2", "온실2")
+            self._stop("H2", "5~8구역")
 
     # ------------------------------------------------------------ 종료
     def on_close(self) -> None:

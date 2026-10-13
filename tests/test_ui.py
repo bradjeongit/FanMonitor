@@ -41,7 +41,7 @@ def ui(root, plant, monkeypatch):
 def test_line_dialog_validation_and_save(ui, plant):
     win, dialogs, msgs, _ = ui
     d = dialogs.LineSettingsDialog(win.root, plant, "H1R1E", on_saved=win.update_header_box)
-    assert d.lbl_house.cget("text") == "온실1 / 1구역 / 짝"
+    assert d.lbl_house.cget("text") == "1구역 / 짝"
     assert d.source_mode.get() == "manual"           # 기본값: 수동
     assert d.lbl_rpm_range.cget("text") == "정수(0~1100)"
 
@@ -73,7 +73,7 @@ def test_line_dialog_reference_mode(ui, plant):
     d._select_line(""); d._on_line_changed()
     d.on_save()
     assert msgs[-1] == ("에러", "참조할 모터가 있는 라인을 선택해주세요.")
-    d._select_line("R2O"); d._on_line_changed()
+    d._select_line("H1R2O"); d._on_line_changed()
     assert list(d.cb_ids.cget("values")) == ["ID", "7"]
     d.on_save()
     assert msgs[-1] == ("에러", "참조할 모터 ID를 선택해주세요.")
@@ -126,6 +126,23 @@ def test_motor_add_modify_delete(ui, plant):
     assert lp.LV.rows == []
 
 
+def test_eight_zones_on_one_screen(ui, plant):
+    win, dialogs, msgs, _ = ui
+    assert len(win.line_panels) == 16 and sorted(win.zone_panels) == list(range(1, 9))
+    # 5구역(온실2 1구역) 짝 라인을 1구역 짝 기존모터 참조로 설정
+    plant.houses["H1R1E"].add_motor(3, MotorType.OLD_MOTOR, True)
+    d = dialogs.LineSettingsDialog(win.root, plant, "H2R1E", on_saved=win.update_header_box)
+    assert d.lbl_house.cget("text") == "5구역 / 짝"
+    assert len(d.cb_lines.cget("values")) == 17
+    d.source_mode.set("ref"); d._on_mode()
+    d._select_line("H1R1E"); d._on_line_changed()
+    d.cb_ids.current(1)
+    d.on_save()
+    c = plant.configs["H2R1E"]
+    assert (c.source_manual, c.source_line, c.source_id) == (False, "H1R1E", 3)
+    assert win.line_panels["H2R1E"].lbl_source.cget("text") == "1구역 > 짝 > 3"
+
+
 def test_main_window_controls_and_sort(ui, plant, monkeypatch):
     win, _, _, answers = ui
     from motor_monitor.ui import theme as T
@@ -149,6 +166,7 @@ def test_main_window_controls_and_sort(ui, plant, monkeypatch):
     assert lp.rec_SOURCE_NETSTATUS.color == T.NET_ERR          # 실행 중 + 미접속 = 빨강
     assert lp.rec_SID_NETSTATUS.color == T.NET_OK              # 수동 모드 = 항상 정상
     win.on_h2_start()
-    assert started == ["H1"]                                   # 원본처럼 온실2 버튼은 동작 안 함
+    assert started == ["H1", "H2"]                             # v1.1.0: 5~8구역 제어 버튼 활성
+    assert win.line_panels["H2R1E"].rec_SOURCE_NETSTATUS.color == T.NET_ERR
     win.on_h1_stop()
     assert lp.rec_SOURCE_NETSTATUS.color == T.NET_STOP

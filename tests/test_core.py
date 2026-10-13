@@ -14,7 +14,9 @@ from motor_monitor.simulator import FakeGateway
 
 # ---------------------------------------------------------------- helpers
 def test_house_names():
-    assert get_house_name("H1R2E") == "온실1 / 2구역 / 짝"
+    assert get_house_name("H1R2E") == "2구역 / 짝"
+    assert get_house_name("H2R1E") == "5구역 / 짝"          # 온실2 1구역 = 화면 5구역
+    assert get_house_name("H2R4O", "/") == "8구역/홀"
     assert get_house_short_name("H1R3O", " > ") == "3구역 > 홀"
     assert get_house_name("H1") == ""
 
@@ -134,6 +136,18 @@ def test_status_transitions(tmp_path):
     assert m.status == MotorStatus.NOTUSE and m.must_send_zero and m.rdate is None
     h.mod_motor(key, True)
     assert h.get_motor(key).status == MotorStatus.READY
+
+
+def test_new_motor_status_tracking(tmp_path):
+    plant, h = _house(tmp_path)
+    h.add_motor(10, MotorType.NEW_MOTOR, True)
+    h.update_status()
+    assert h.get_motor("1_10").status == MotorStatus.READY
+    frame = bytes([0, 1, 0, 0, 0, 17, 10, 3, 14, 0, 1, 0, 1, 0, 0, 0x03, 0x20] + [0] * 6)
+    h._handle_tgt_frame(frame)
+    h.update_status()
+    m = h.get_motor("1_10")
+    assert m.status == MotorStatus.OK and m.rpm == 800
 
 
 def test_reference_users(tmp_path):
