@@ -1,0 +1,104 @@
+﻿<Window x:Class="wHOUSE"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BLDC_MOTOR_MONITOR"
+        mc:Ignorable="d"
+        WindowStyle="None" Background="Transparent"
+        Title="모터 추가/수정" Height="300" Width="400" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" AllowsTransparency="True" >
+    <Window.Resources>
+        <Style x:Key="LineTitle" TargetType="TextBlock">
+            <Setter Property="Width" Value="100"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#363636"/>
+            <Setter Property="Margin" Value="10 0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="#363636"/>
+            <Setter Property="Background" Value="#EFEFEF"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="DemiBold"/>
+            <Setter Property="Height" Value="26"/>
+        </Style>
+        
+    </Window.Resources>
+
+    <Border CornerRadius="10" Background="White" ClipToBounds="True" BorderThickness="1" BorderBrush="#E0E0E0">
+        <Grid >
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40" />
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="50"/>
+            </Grid.RowDefinitions>
+            <Border Background="#2c3e50" CornerRadius="10 10 0 0" MouseDown="Border_MouseDown">
+                <TextBlock FontSize="18" FontWeight="ExtraBold" Foreground="white" HorizontalAlignment="Center" VerticalAlignment="Center" Text="라인설정"/>
+            </Border>
+            <StackPanel Grid.Row="1" Background="White">
+
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0" VerticalAlignment="Center" >
+                    <TextBlock Style="{StaticResource LineTitle}" >위치</TextBlock>
+                    <Label x:Name="lbl_house" VerticalAlignment="Center" FontSize="14" FontWeight="DemiBold">-</Label>
+                </StackPanel>
+                <Line X2="1" Stroke="#e0e0e0" Stretch="Fill" Margin="10 0" StrokeDashArray="1 2" StrokeThickness="1"/>
+
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0" VerticalAlignment="Center" >
+                    <TextBlock Style="{StaticResource LineTitle}" >기존모터 IP/PORT</TextBlock>
+                    <TextBox x:Name="txtSIP" Width="120"/> <!--PreviewTextInput="PreviewTextInput_IP" PreviewKeyDown="PreviewKeyDown_PreventHanguel"/>-->
+                    <Label VerticalAlignment="Center">/</Label>
+                    <TextBox x:Name="txtSPORT" Width="60"/> <!--PreviewTextInput="PreviewTextInput_OnlyInteger" PreviewKeyDown="PreviewKeyDown_PreventHanguel"/>-->
+                </StackPanel>
+                
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0" VerticalAlignment="Center" >
+                    <TextBlock Style="{StaticResource LineTitle}" >신규모터 IP/PORT</TextBlock>
+                    <TextBox x:Name="txtTIP" Width="120"/> <!--PreviewTextInput="PreviewTextInput_IP" PreviewKeyDown="PreviewKeyDown_PreventHanguel"/>-->
+                    <Label VerticalAlignment="Center">/</Label>
+                    <TextBox x:Name="txtTPORT" Width="60"/> <!--PreviewTextInput="PreviewTextInput_OnlyInteger" PreviewKeyDown="PreviewKeyDown_PreventHanguel"/>-->
+                </StackPanel>
+                <Line X2="1" Stroke="#e0e0e0" Stretch="Fill" Margin="10 0" StrokeDashArray="1 2" StrokeThickness="1"/>
+
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0" VerticalAlignment="Center" >
+                    <TextBlock Style="{StaticResource LineTitle}" >RPM 제어 소스</TextBlock>
+                    <RadioButton x:Name="rb_source_manual" VerticalAlignment="Center" FontSize="14" FontWeight="DemiBold" Checked="rb_source_manual_Checked">수동</RadioButton>
+                    <RadioButton x:Name="rb_source_ref" VerticalAlignment="Center" Margin="20 0" FontSize="14" FontWeight="DemiBold" Checked="rb_source_ref_Checked">기존모터</RadioButton>
+                </StackPanel>
+                <StackPanel x:Name="manual_line" Orientation="Horizontal" Height="40" Margin="30 0 10 0" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource LineTitle}" >┖ 수동RPM값</TextBlock>
+                    <TextBox x:Name="txtMRPM" Width="80"/> <!--PreviewTextInput="PreviewTextInput_OnlyInteger" PreviewKeyDown="PreviewKeyDown_PreventHanguel"/>-->
+                    <Label x:Name="lbl_rpm_range" VerticalAlignment="Center">-</Label>
+                </StackPanel>
+                <StackPanel x:Name="ref_line" Orientation="Horizontal" Height="40" Margin="30 0 10 0" >
+                    <TextBlock Style="{StaticResource LineTitle}" >┖ 참조기존모터</TextBlock>
+                    <!--<Label VerticalAlignment="Center">라인</Label>-->
+                    <ComboBox x:Name="cb_lines" VerticalAlignment="Center" Width="100" FontSize="14" FontWeight="DemiBold" SelectedValuePath="Tag" SelectionChanged="cb_lines_SelectionChanged">
+                        <ComboBoxItem Tag="">라인</ComboBoxItem>                        
+                        <ComboBoxItem Tag="R1E">1구역/짝</ComboBoxItem>
+                        <ComboBoxItem Tag="R1O">1구역/홀</ComboBoxItem>
+                        <ComboBoxItem Tag="R2E">2구역/짝</ComboBoxItem>
+                        <ComboBoxItem Tag="R2O">2구역/홀</ComboBoxItem>
+                        <ComboBoxItem Tag="R3E">3구역/짝</ComboBoxItem>
+                        <ComboBoxItem Tag="R3O">3구역/홀</ComboBoxItem>
+                        <ComboBoxItem Tag="R4E">4구역/짝</ComboBoxItem>
+                        <ComboBoxItem Tag="R4O">4구역/홀</ComboBoxItem>
+                    </ComboBox>
+                    <Label VerticalAlignment="Center"> > </Label>
+                    <ComboBox x:Name="cb_ids" VerticalAlignment="Center" FontSize="14" FontWeight="DemiBold"  Width="50" SelectedValuePath="Tag" />
+                </StackPanel>
+                <Line X2="1" Stroke="#e0e0e0" Stretch="Fill" Margin="10 0" StrokeDashArray="1 2" StrokeThickness="1"/>
+            </StackPanel>
+
+
+            <Border Grid.Row="2" Background="White" CornerRadius="0 0 10 10">
+                <Grid >
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="BtnSave" IsDefault="True" Template="{DynamicResource SubmitButtonTemplate}" Click="BtnSave_Click">저장</Button>
+                        <Button x:Name="BtnCancel" Margin="5 0" IsCancel="True" Template="{DynamicResource NormalButtonTemplate}" Click="BtnCancel_Click">취소</Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

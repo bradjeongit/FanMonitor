@@ -1,0 +1,133 @@
+﻿<Window x:Class="wMotor"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BLDC_MOTOR_MONITOR"
+        mc:Ignorable="d"
+        WindowStyle="None" Background="Transparent"
+        Title="모터 추가/수정" Height="260" Width="400" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" AllowsTransparency="True" >
+    <Window.Resources>
+        <Style x:Key="LineTitle" TargetType="TextBlock">
+            <Setter Property="Width" Value="100"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="#363636"/>
+            <Setter Property="Margin" Value="10 0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="#363636"/>
+            <Setter Property="Background" Value="#EFEFEF"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="Height" Value="26"/>
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="10" Background="White" ClipToBounds="True" BorderThickness="1" BorderBrush="#E0E0E0">
+        <Grid >
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40" />
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="50"/>
+            </Grid.RowDefinitions>
+            <Border Background="#16a085" CornerRadius="10 10 0 0" MouseDown="Border_MouseDown">
+                <TextBlock x:Name="wtitle" FontSize="18" FontWeight="ExtraBold" Foreground="white" HorizontalAlignment="Center" VerticalAlignment="Center">모터 추가</TextBlock>
+            </Border>
+            <StackPanel Grid.Row="1" Background="White">
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0">
+                    <TextBlock Style="{StaticResource LineTitle}" >위치</TextBlock>
+                    <Label x:Name="lbl_house" VerticalAlignment="Center" FontSize="14" FontWeight="DemiBold">-</Label>
+                </StackPanel>
+                <Line X2="1" Stroke="#e0e0e0" Stretch="Fill" Margin="10 0" StrokeDashArray="1 2" StrokeThickness="1"/>
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0">
+                    <TextBlock Style="{StaticResource LineTitle}">모터종류</TextBlock>
+                    <StackPanel x:Name="add_type_line" Orientation="Horizontal">
+                        <RadioButton x:Name="rb_oldmotor" Margin="0 -5 10 -5" VerticalContentAlignment="Center">
+                            <RadioButton.ContentTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Image Source="/images/oldmotor.png" Width="20" Height="20" Margin="5 0"/>
+                                        <Label FontSize="14" FontWeight="DemiBold">기존모터</Label>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </RadioButton.ContentTemplate>
+                        </RadioButton>
+                        <RadioButton x:Name="rb_newmotor" Margin="8 -5" VerticalContentAlignment="Center">
+                            <RadioButton.ContentTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Image Source="/images/newmotor.png" Width="20" Height="20" Margin="5 0"/>
+                                        <Label FontSize="14" FontWeight="DemiBold">신규모터</Label>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </RadioButton.ContentTemplate>
+                        </RadioButton>
+                    </StackPanel>
+                    <StackPanel x:Name="mod_type_line" Orientation="Horizontal">
+                        <Image x:Name="img_type_0" Source="/images/oldmotor.png" Width="20" Height="20" Margin="0 0 5 0"/>
+                        <Image x:Name="img_type_1" Source="/images/newmotor.png" Width="20" Height="20" Margin="0 0 5 0"/>
+                        <Label x:Name="lbl_type" VerticalAlignment="Center" FontSize="14" Content="type"></Label>
+                    </StackPanel>
+                </StackPanel>
+                <Line X2="1" Stroke="#e0e0e0" Stretch="Fill" Margin="10 0" StrokeDashArray="1 2" StrokeThickness="1"/>
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0">
+                    <TextBlock Style="{StaticResource LineTitle}" >모터ID</TextBlock>
+                    <StackPanel x:Name="add_id_line" Orientation="Horizontal">
+                        <TextBox x:Name="txtID" Text="" Width="100" Margin="0 0 10 0"  FontSize="14"/> <!--PreviewTextInput="PreviewTextInput_OnlyInteger" PreviewKeyDown="PreviewKeyDown_PreventHanguel"/>-->
+                        <Label VerticalAlignment="Center">정수(1~99)</Label>
+                    </StackPanel>
+                    <StackPanel x:Name="mod_id_line" Orientation="Horizontal" >
+                        <Label x:Name="lblID" VerticalAlignment="Center"  FontSize="14" FontWeight="DemiBold">00</Label>
+                    </StackPanel>
+                </StackPanel>
+                <Line X2="1" Stroke="#e0e0e0" Stretch="Fill" Margin="10 0" StrokeDashArray="1 2" StrokeThickness="1"/>
+                <StackPanel Orientation="Horizontal" Height="40" Margin="10 0">
+                    <TextBlock Style="{StaticResource LineTitle}" Text="사용여부" />
+                    <RadioButton x:Name="rb_use" Margin="0 0 10 0" VerticalContentAlignment="Center" FontSize="14">
+                        <RadioButton.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Image Source="/images/good.png" Width="20" Height="20" Margin="5 0"/>
+                                    <Label FontSize="14" FontWeight="DemiBold">사용</Label>
+                                </StackPanel>
+                            </DataTemplate>
+                        </RadioButton.ContentTemplate>
+                    </RadioButton>
+                    <RadioButton x:Name="rb_nouse" Margin="36 0 0 0" VerticalContentAlignment="Center" FontSize="14">
+                        <RadioButton.ContentTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Image Source="/images/nouse.png" Width="20" Height="20" Margin="5 0"/>
+                                    <Label FontSize="14" FontWeight="DemiBold">중지</Label>
+                                </StackPanel>
+                            </DataTemplate>
+                        </RadioButton.ContentTemplate>
+                    </RadioButton>
+                </StackPanel>
+                <Line X2="1" Stroke="#e0e0e0" Stretch="Fill" Margin="10 0" StrokeDashArray="1 2" StrokeThickness="1"/>
+            </StackPanel>
+
+
+            <Border Grid.Row="2" Background="White" CornerRadius="0 0 10 10">
+                <Grid >
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" HorizontalAlignment="Left">
+                        <Button x:Name="BtnDelete" Margin="5 0" Visibility="Hidden" Template="{DynamicResource AlertButtonTemplate}" Click="BtnDelete_Click">삭제</Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="BtnSave" IsDefault="True" Template="{DynamicResource SubmitButtonTemplate}" Click="BtnSave_Click">저장</Button>
+                        <Button x:Name="BtnCancel" Margin="5 0" IsCancel="True" Template="{DynamicResource NormalButtonTemplate}">취소</Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+    
+
+
+</Window>
