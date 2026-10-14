@@ -151,8 +151,13 @@ class FakeGateway:
             return struct.pack(">HHHB", tid, 0, len(pdu) + 1, uid) + pdu
         if fc == modbus.FC_READ_HOLDING and addr + val <= len(h):
             return frame(struct.pack(">BB", fc, val * 2) + b"".join(struct.pack(">H", v) for v in h[addr:addr + val]))
-        if fc == modbus.FC_READ_INPUT and addr == modbus.ECB_I_SPEED and val == 1:
-            return frame(struct.pack(">BBH", fc, 2, self.ecb_speed(uid)))
+        if fc == modbus.FC_READ_INPUT:
+            # i12 오류상태, i14 실제 회전수, i15 모터전류(0.01A). i13(FW14 이상)은 없는 펌웨어로 흉내
+            spd = self.ecb_speed(uid)
+            inputs = {12: d.get("err", 0), modbus.ECB_I_SPEED: spd, 15: d.get("current", spd // 4)}
+            regs = [inputs.get(a) for a in range(addr, addr + val)]
+            if val >= 1 and None not in regs:
+                return frame(struct.pack(">BB", fc, val * 2) + b"".join(struct.pack(">H", v) for v in regs))
         if fc == modbus.FC_WRITE_SINGLE and addr < len(h):
             if addr == modbus.ECB_H_PIN:
                 d["pin_ok"] = val == modbus.ECB_PIN_LEVEL2
