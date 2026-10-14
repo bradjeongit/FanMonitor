@@ -1,0 +1,797 @@
+﻿<Window x:Class="MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BLDC_MOTOR_MONITOR"
+        mc:Ignorable="d"
+        Icon="/images/motor.ico"
+        Title="BLDC MOTOR MONITOR" MinHeight="650" MinWidth="1000" >
+    <Window.Resources>
+
+        <!--#region LISTVIEW스타일 -->
+        <Style TargetType="ListView">
+            <Setter Property="Margin" Value="5 0"/>
+            <Setter Property="SelectionMode" Value="Single"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="ToolTip" Value="항목 더블클릭시 수정/삭제"/>
+        </Style>
+        <!--#endregion-->
+                        
+        <!--리스트뷰에 사용되는 상태 열 구성 템플릿-->
+        <DataTemplate x:Key="StatusTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="35"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Image Width="20" Height="20">
+                    <Image.Style>
+                        <Style TargetType="Image">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding STATUS}" Value="0">
+                                    <Setter Property="Source" Value="/images/good.png"/>
+                                    <Setter Property="ToolTip" Value="정상"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding STATUS}" Value="1">
+                                    <Setter Property="Source" Value="/images/bad.png"/>
+                                    <Setter Property="ToolTip" Value="이상"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding STATUS}" Value="2">
+                                    <Setter Property="Source" Value="/images/nouse.png"/>
+                                    <Setter Property="ToolTip" Value="중지(사용안함)"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Image.Style>
+                </Image>
+                <Label Grid.Column="1" HorizontalContentAlignment="Right">
+                    <Label.Style>
+                        <Style TargetType="Label">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding STATUS}" Value="0">
+                                    <Setter Property="Content" Value="{Binding RPM}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding STATUS}" Value="1">
+                                    <Setter Property="Content" Value="이상"/>
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding STATUS}" Value="2">
+                                    <Setter Property="Content" Value="중지"/>
+                                    <Setter Property="Foreground" Value="LightGray"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding STATUS}" Value="9">
+                                    <Setter Property="Content" Value="대기"/>
+                                    <Setter Property="Foreground" Value="LightGray"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Label.Style>
+                </Label>
+            </Grid>
+            
+        </DataTemplate>
+
+        <!--리스트뷰에 사용되는 모터 타입 열 이미지 구성 템플릿-->
+        <DataTemplate x:Key="MotorTypeTemplate">
+            <StackPanel Orientation="Horizontal">
+                <Image Width="20" Height="20" Stretch="Fill" >
+                    <Image.Style>
+                        <!--#region 모터종류그림템플릿 -->
+                        <Style TargetType="Image">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding MType}" Value="0">
+                                    <Setter Property="Source" Value="/images/oldmotor.png"/>
+                                    <Setter Property="ToolTip" Value="기존모터"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding MType}" Value="1">
+                                    <Setter Property="Source" Value="/images/newmotor.png"/>
+                                    <Setter Property="ToolTip" Value="신규모터"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                        <!--#endregion-->
+                    </Image.Style>
+                </Image>
+            </StackPanel>
+        </DataTemplate>
+
+        <!--설정 버튼 스타일-->
+        <Style x:Key="SettingsTemplate" TargetType="Button">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Image Source="/images/settings.png" Width="22" Height="22" ToolTip="설정"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Cursor" Value="Hand"/>
+            <EventSetter Event="Click" Handler="Btn_Setting_Click"/>
+        </Style>
+
+        <!--설정 버튼 스타일 -->
+        <Style x:Key="AddTemplate" TargetType="Button">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Image Source="/images/add.png" Width="22" Height="22" ToolTip="추가"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="Cursor" Value="Hand"/>
+            <EventSetter Event="Click" Handler="Btn_Add_Click"/>
+        </Style>
+
+        <!-- 탭 선택/비선택 모양 스타일-->
+        <Style TargetType="TabItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Grid>
+                            <Border  Name="Border" Margin="0,0,-4,0" BorderThickness="0" CornerRadius="2,12,0,0" >
+                                <ContentPresenter x:Name="ContentSite" VerticalAlignment="Center" HorizontalAlignment="Center" ContentSource="Header" Margin="12,2,12,2" RecognizesAccessKey="True"/>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Panel.ZIndex" Value="100" />
+                                <Setter TargetName="Border" Property="Background" Value="#16a085" />
+                                <Setter TargetName="ContentSite" Property="TextElement.Foreground" Value="white" />
+                                <Setter TargetName="ContentSite" Property="TextElement.FontWeight" Value="DemiBold" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="False">
+                                <Setter TargetName="Border" Property="Background" Value="LightGray" />
+                            </Trigger>
+
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 제어 시작 템플릿 스타일-->
+        <ControlTemplate x:Key="StartButton" TargetType="Button">
+            <Border Name="bg" CornerRadius="5" BorderThickness="1" BorderBrush="DarkGray" Background="white">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Polygon Name="shape" Points="0,1 6,6 0,11" Fill="#2980b9" Stroke="DarkGray" StrokeThickness="0" VerticalAlignment="Center" Margin="5 0 5 1"/>
+                    <ContentPresenter Name="cp" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="bg" Property="Background" Value="#2980b9" />
+                    <Setter TargetName="shape" Property="Fill" Value="white" />
+                    <Setter TargetName="cp" Property="TextElement.Foreground" Value="white" />
+                    <Setter Property="Cursor" Value="Hand"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+        <!-- 제어 종료 템플릿 스타일-->
+        <ControlTemplate x:Key="StopButton" TargetType="Button">
+            <Border Name="bg" CornerRadius="5" BorderThickness="1" BorderBrush="DarkGray" Background="white">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Rectangle Name="shape" Width="10" Height="10" Fill="#c0392b" Margin="5 1 5 0"/>
+                    <ContentPresenter Name="cp" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="bg" Property="Background" Value="#c0392b" />
+                    <Setter TargetName="shape" Property="Fill" Value="white" />
+                    <Setter TargetName="cp" Property="TextElement.Foreground" Value="white" />
+                    <Setter Property="Cursor" Value="Hand"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="0"/> <!--숨겨놓음-->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0" Orientation="Horizontal">
+            <Button Content="test" Template="{DynamicResource NormalButtonTemplate}"/>
+            <Button Content="test" Template="{DynamicResource SubmitButtonTemplate}"/>
+            <Button Content="test" Template="{DynamicResource AlertButtonTemplate}"/>
+
+        </StackPanel>
+        
+        <TabControl x:Name="house_tab" Grid.Row="1" Margin="5 0 5 5" TabStripPlacement="Top">
+            <TabItem Header="온실1" Width="100" Height="30" >
+                <!--#region 온실1영역 -->
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="1*"/>
+                        <RowDefinition Height="1*"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*"/>
+                        <ColumnDefinition Width="1*"/>
+                    </Grid.ColumnDefinitions>
+                    <GroupBox Grid.Row="0" Grid.Column="0" Margin="5">
+                        <!--#region 온실1-1구역 영역 -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <!--ListView상단공간크기-->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="60"/>
+                                <RowDefinition Height ="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 구역 타이틀 -->
+                            <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="5" CornerRadius="3" Background="#34495e" Margin="0 3">
+                                <TextBlock HorizontalAlignment="Center" Margin="0 3" Foreground="white" FontWeight="DemiBold">1구역</TextBlock>
+                            </Border>
+
+                            <!--#region 온실1-1구역 짝수 영역 -->
+
+                            <Grid Grid.Row="1" Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#f39c12" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">짝</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R1E_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R1E_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R1E_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R1E_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R1E_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R1E_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R1E" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R1E" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R1E" Grid.Row="2" Grid.Column="0" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                            </ListView>
+                            <!--#endregion-->
+
+                            <!--#region 온실1-1구역 홀수 영역 -->
+                            <Grid Grid.Row="1" Grid.Column="1">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#2980b9" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">홀</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R1O_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R1O_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R1O_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R1O_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R1O_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="gray"/>
+                                    <TextBlock x:Name="H1R1O_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R1O" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R1O" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R1O" Grid.Row="2" Grid.Column="1" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+
+                            </ListView>
+                            <!--#endregion-->
+
+                        </Grid>
+                        <!--#endregion-->
+                    </GroupBox>
+                    <GroupBox Grid.Row="0" Grid.Column="1" Margin="5">
+                        <!--#region 온실1-2구역 영역 -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <!--ListView상단공간크기-->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="60"/>
+                                <RowDefinition Height ="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 구역 타이틀 -->
+                            <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="5" CornerRadius="3" Background="#34495e" Margin="0 3">
+                                <TextBlock HorizontalAlignment="Center" Margin="0 3" Foreground="white" FontWeight="DemiBold">2구역</TextBlock>
+                            </Border>
+
+                            <!--#region 온실1-2구역 짝수 영역 -->
+
+                            <Grid Grid.Row="1" Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#f39c12" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">짝</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R2E_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R2E_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R2E_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R2E_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R2E_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R2E_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R2E" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R2E" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R2E" Grid.Row="2" Grid.Column="0" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                            </ListView>
+                            <!--#endregion-->
+
+                            <!--#region 온실1-2구역 홀수 영역 -->
+                            <Grid Grid.Row="1" Grid.Column="1">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#2980b9" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">홀</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R2O_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R2O_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R2O_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R2O_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R2O_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R2O_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R2O" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R2O" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R2O" Grid.Row="2" Grid.Column="1" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+
+                            </ListView>
+                            <!--#endregion-->
+
+                        </Grid>
+                        <!--#endregion-->
+                    </GroupBox>
+                    <GroupBox Grid.Row="1" Grid.Column="0" Margin="5">
+                        <!--#region 온실1-3구역 영역 -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <!--ListView상단공간크기-->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="60"/>
+                                <RowDefinition Height ="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 구역 타이틀 -->
+                            <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="5" CornerRadius="3" Background="#34495e" Margin="0 3">
+                                <TextBlock HorizontalAlignment="Center" Margin="0 3" Foreground="white" FontWeight="DemiBold">3구역</TextBlock>
+                            </Border>
+
+                            <!--#region 온실1-3구역 짝수 영역 -->
+
+                            <Grid Grid.Row="1" Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#f39c12" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">짝</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R3E_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R3E_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R3E_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R3E_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R3E_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R3E_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R3E" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R3E" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R3E" Grid.Row="2" Grid.Column="0" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                            </ListView>
+                            <!--#endregion-->
+
+                            <!--#region 온실1-3구역 홀수 영역 -->
+                            <Grid Grid.Row="1" Grid.Column="1">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#2980b9" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">홀</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R3O_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R3O_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R3O_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R3O_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R3O_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R3O_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R3O" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R3O" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R3O" Grid.Row="2" Grid.Column="1" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+
+                            </ListView>
+                            <!--#endregion-->
+
+                        </Grid>
+                        <!--#endregion-->
+                    </GroupBox>
+                    <GroupBox Grid.Row="1" Grid.Column="1" Margin="5">
+                        <!--#region 온실1-4구역 영역 -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <!--ListView상단공간크기-->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="60"/>
+                                <RowDefinition Height ="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- 구역 타이틀 -->
+                            <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="5" CornerRadius="3" Background="#34495e" Margin="0 3">
+                                <TextBlock HorizontalAlignment="Center" Margin="0 3" Foreground="white" FontWeight="DemiBold">4구역</TextBlock>
+                            </Border>
+
+                            <!--#region 온실1-4구역 짝수 영역 -->
+
+                            <Grid Grid.Row="1" Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#f39c12" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">짝</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R4E_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R4E_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R4E_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R4E_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R4E_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R4E_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R4E" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R4E" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R4E" Grid.Row="2" Grid.Column="0" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                            </ListView>
+                            <!--#endregion-->
+
+                            <!--#region 온실1-4구역 홀수 영역 -->
+                            <Grid Grid.Row="1" Grid.Column="1">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                    <RowDefinition Height="1*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="26"/>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="30"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Row="0" Grid.Column="0" CornerRadius="5" Grid.RowSpan="3" Background="#2980b9" Margin="5 0 0 2">
+                                    <Label HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White">홀</Label>
+                                </Border>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/oldmotor.png" Width="15" Height="15" ToolTip="기존모터"/>
+                                    <Rectangle x:Name="rec_H1R4O_SOURCE_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R4O_lbl_old_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <Image Source="/images/newmotor.png" Width="15" Height="15" ToolTip="신규모터"/>
+                                    <Rectangle x:Name="rec_H1R4O_TARGET_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R4O_lbl_new_ip" Margin="5 0 0 0">-</TextBlock>
+                                </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="5 0 0 0">
+                                    <TextBlock Width="15">┖</TextBlock>
+                                    <Rectangle x:Name="rec_H1R4O_SID_NETSTATUS" Width="10" Height="10" RadiusX="10" RadiusY="10" Margin="5 0 0 0" Fill="Gray"/>
+                                    <TextBlock x:Name="H1R4O_lbl_source" VerticalAlignment="Top" Margin="5 0 0 0" >-</TextBlock>
+                                </StackPanel>
+                                <Button x:Name="Btn_Settings_H1R4O" Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" Style="{StaticResource SettingsTemplate}"/>
+                                <Button x:Name="Btn_Add_H1R4O" Grid.Row="1" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Bottom" Style="{StaticResource AddTemplate}"/>
+                            </Grid>
+
+                            <ListView x:Name="LV_H1R4O" Grid.Row="2" Grid.Column="1" GridViewColumnHeader.Click="lvHeader_CLICK" MouseDoubleClick="Lv_DBClick" SizeChanged="ListView_SizeChanged">
+
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.Columns>
+                                            <GridViewColumn Header="" Width="35" CellTemplate="{StaticResource MotorTypeTemplate}"  />
+                                            <GridViewColumn Header="ID" Width="50">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Label Content="{Binding ID}" HorizontalContentAlignment="Center"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="상태" Width="150" CellTemplate="{StaticResource StatusTemplate}"/>
+                                        </GridView.Columns>
+                                    </GridView>
+                                </ListView.View>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+
+                            </ListView>
+                            <!--#endregion-->
+
+                        </Grid>
+                        <!--#endregion-->
+                    </GroupBox>
+                </Grid>
+                <!--#endregion-->
+            </TabItem>
+            <TabItem Header="온실2"  Width="100" Height="30">
+
+            </TabItem>
+        </TabControl>
+
+        <Button x:Name="H1_StartBtn" Grid.Row="1" Content="온실1 제어 시작" Click="H1_StartBtn_Click" FontWeight="DemiBold" Width="140" Height="29" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="250 2" Template="{StaticResource StartButton}" />
+        <Button x:Name="H1_StopBtn" Grid.Row="1" Content="온실1 제어 종료" Click="H1_StopBtn_Click" FontWeight="DemiBold" Width="140" Height="29" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="250 2" Template="{StaticResource StopButton}" />
+
+        <Button x:Name="H2_StartBtn" Grid.Row="1" Content="온실2 제어 시작" Click="H2_StartBtn_Click" FontWeight="DemiBold" Width="140" Height="29" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="400 2" Template="{StaticResource StartButton}" />
+        <Button x:Name="H2_StopBtn" Grid.Row="1" Content="온실2 제어 종료" Click="H2_StopBtn_Click" FontWeight="DemiBold" Width="140" Height="29" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="400 2" Template="{StaticResource StopButton}" />
+
+    </Grid>
+</Window>

@@ -1,0 +1,53 @@
+﻿<Application x:Class="Application"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:BLDC_MOTOR_MONITOR"
+    StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        
+        <!-- 일반버튼 -->
+        <ControlTemplate x:Key="NormalButtonTemplate" TargetType="Button">
+            <Border x:Name="bd" CornerRadius="5" BorderThickness="1" BorderBrush="#e0e0e0" Background="#ecf0f1" Padding="30 0" Height="30">
+                <TextBlock x:Name="tb" Text="{TemplateBinding Button.Content}" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="Button.IsMouseOver" Value="True">
+                    <Setter TargetName="bd" Property="Background" Value="#d4d4d4"/>
+                    <Setter TargetName="tb" Property="FontWeight" Value="Bold"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+        
+        <!-- submit 버튼-->
+        <ControlTemplate x:Key="SubmitButtonTemplate" TargetType="Button">
+            <Border x:Name="bd" CornerRadius="5" Background="#547791" Padding="30 0" Height="30">
+                <TextBlock x:Name="tb" Text="{TemplateBinding Button.Content}" VerticalAlignment="Center" Foreground="white"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="Button.IsMouseOver" Value="True">
+                    <Setter TargetName="bd" Property="Background" Value="#3a5e79"/>
+                    <Setter TargetName="tb" Property="FontWeight" Value="Bold"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- alert 버튼-->
+        <ControlTemplate x:Key="AlertButtonTemplate" TargetType="Button">
+            <Border x:Name="bd" CornerRadius="5" Background="#e74c3c" Padding="30 0" Height="30">
+                <TextBlock x:Name="tb" Text="{TemplateBinding Button.Content}" VerticalAlignment="Center" Foreground="white"/>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="Button.IsMouseOver" Value="True">
+                    <Setter TargetName="bd" Property="Background" Value="#c0392b"/>
+                    <Setter TargetName="tb" Property="FontWeight" Value="Bold"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+
+        <!-- ComboBox 에 item 추가시 오류발생 방지 -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Application.Resources>
+</Application>

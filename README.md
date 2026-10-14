@@ -1,0 +1,40 @@
+# FanMonitor — BLDC MOTOR MONITOR (Python)
+
+온실 기존 팬 모터의 RPM 을 읽어 신규 팬 모터를 자동 제어하고, 전체 모터 상태를 감시하는 프로그램입니다.
+현재 운영 중인 실행파일 `BLDC_MOTOR_MONITOR.exe`(VB.NET WPF)를 분석해 같은 기능·같은 화면 구성으로 파이썬에 옮겼습니다.
+운영 프로그램의 설정 파일 `Config.dll` 을 그대로 읽고 씁니다.
+
+## 문서
+- **사용자 매뉴얼**: [docs/USER_MANUAL.md](docs/USER_MANUAL.md) — 화면 기능별 사용법
+- **스펙시트**: [docs/SPEC_SHEET.md](docs/SPEC_SHEET.md) — 구성요소 ID, 동작 규칙, 통신·설정 사양, 원본과의 차이, 변경 이력
+  수정 요청 시 스펙시트의 ID(예: `ZONE-*-BTN-SET`, `MSG-LINE-02`)를 사용하면 정확히 전달됩니다.
+
+## 실행
+```
+python run.py              # Python 3.9+ (표준 라이브러리만 사용)
+python run.py --debug      # 통신 패킷 로그 포함
+python run.py --monitoring # 모니터링 모드: 읽기만, 제어 신호 전송 안 함 (run_monitoring.bat)
+build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
+```
+설정은 실행 폴더의 `Config.dll`(운영 프로그램과 같은 암호화 파일), 로그는 `logs/` 에 저장됩니다.
+`Config.dll` 은 현장 정보가 들어 있어 저장소에 올리지 않습니다(.gitignore).
+
+## 시험
+```
+python -m pytest                                  # 로직 시험
+xvfb-run -a python -m pytest                      # (리눅스) 화면 시험 포함
+python -m motor_monitor.simulator --port 5020 --old 2:770 --new 1,3   # 가상 모터 통신장치
+python -m motor_monitor.config Config.dll                           # 설정 파일 평문 확인
+```
+
+## 폴더 구성
+```
+run.py                     실행 시작점
+motor_monitor/             프로그램 본체 (구성은 스펙시트 10장)
+  ui/                      화면 (메인, 대화상자, 위젯, 색상)
+  assets/                  그림 파일
+tests/                     자동 시험
+tools/                     문서용 화면 캡처 스크립트
+docs/                      사용자 매뉴얼, 스펙시트, 화면 그림
+reference/original_vb/     처음 받은 구버전 VB.NET 소스 (참고용, 현재 운영 버전과 다름)
+```

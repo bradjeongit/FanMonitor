@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+logs/
+Config.ini
+*.lock
+Config.dll
+uconfig.dll
