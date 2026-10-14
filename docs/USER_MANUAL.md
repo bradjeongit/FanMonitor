@@ -309,7 +309,9 @@ python -m motor_monitor.simulator --port 5020 --old 2:770 --new 1,3
 
 기존(ECblue) 모터 **ID 180, 176** (통신장치 **172.27.0.95:502**) 을 직접 시험하는 작은 별도 프로그램입니다. 대상은 고정되어 있어 입력할 것이 없습니다. 운영 프로그램과 `Config.dll` 은 건드리지 않습니다.
 
-- 실행: 프로그램 폴더의 **`ecblue_tester.bat`** 더블클릭 (또는 `python tools\ecblue_tester.py`)
+- 실행: **`ECBLUE_TESTER.exe`** 더블클릭 (파이썬 설치 불필요, 파일 하나만 복사해서 사용). 또는 프로그램 폴더의 `ecblue_tester.bat` / `python tools\ecblue_tester.py`
+- exe 받기: GitHub 저장소 → **Actions** → *Build ECblue tester exe* → 최근 실행 → 아래 **Artifacts** 의 `ECBLUE_TESTER` (zip 안에 exe). 직접 만들려면 Windows 에서 `build_tester_exe.bat` → `dist\ECBLUE_TESTER.exe`
+- exe 로 실행하면 로그는 **exe 옆 `logs` 폴더**에 생깁니다. 시작하자마자 오류가 나면 `logs\ecblue_tester_error.txt` 에 원인이 남습니다.
 - 화면: 620×520 (최소 460×470). 왼쪽이 180번, 오른쪽이 176번 모터입니다.
 
 ![기존모터 시험기](images/tester_annotated.png)

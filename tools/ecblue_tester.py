@@ -3,8 +3,8 @@
 정해진 통신장치·모터 2대(아래 HOST/PORT/MOTOR_IDS)를 직접 시험하고 모든 결과를 로그로 남깁니다.
 모터마다: 접속 테스트 / 현재 속도 / 모니터링(2초마다, 지정 속도 유지) / 속도 지정 / 정지 / 원래대로.
 
-실행: ecblue_tester.bat 더블클릭 또는 python tools/ecblue_tester.py
-로그: logs/ecblue_tester_YYYYMMDD.log (모든 동작), logs/ecblue_monitor_YYYYMMDD.csv (모니터링 측정값)
+실행: ECBLUE_TESTER.exe 또는 ecblue_tester.bat 더블클릭, 또는 python tools/ecblue_tester.py
+로그: (exe 옆 또는 프로그램 폴더) logs/ecblue_tester_YYYYMMDD.log (모든 동작), logs/ecblue_monitor_YYYYMMDD.csv (모니터링 측정값)
 운영 Config.dll 은 사용하지 않습니다.
 """
 from __future__ import annotations
@@ -34,7 +34,10 @@ REQUEST_GAP = 0.1           # 요청 사이 간격 (초)
 MONITOR_INTERVAL_MS = 2000  # 모니터링 주기
 MAX_RPM = 1100
 MODE_WRITE_MAX_TRIES = 3    # h4(영구저장) 쓰기 시도 한도 (실행 1회당, 모터별)
-LOG_DIR = "logs"
+# 로그 폴더: exe 로 실행하면 exe 옆, 파이썬으로 실행하면 프로그램 폴더(tools 의 상위) 아래 logs
+_BASE = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
+         else os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+LOG_DIR = os.path.join(_BASE, "logs")
 
 I_ERROR = 12                # i12 오류 상태
 I_CURRENT = 15              # i15 모터 전류 (0.01 A)
@@ -628,9 +631,22 @@ class TesterApp:
 
 
 def main() -> None:
-    root = tk.Tk()
-    TesterApp(root)
-    root.mainloop()
+    try:
+        root = tk.Tk()
+        TesterApp(root)
+        root.mainloop()
+    except Exception:
+        # 콘솔 없는 exe 에서도 원인을 알 수 있도록 파일과 메시지 창으로 알림
+        import traceback
+        os.makedirs(LOG_DIR, exist_ok=True)
+        path = os.path.join(LOG_DIR, "ecblue_tester_error.txt")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.datetime.now()}\n{traceback.format_exc()}\n")
+        try:
+            messagebox.showerror("ECblue 시험기", f"시작 중 오류가 발생했습니다.\n{path}")
+        except tk.TclError:
+            pass
+        raise
 
 
 if __name__ == "__main__":
