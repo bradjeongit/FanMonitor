@@ -47,7 +47,7 @@
 | ID | 이름 | 여는 방법 | 크기 | 코드 (파일 / 클래스) | 운영 프로그램 |
 |---|---|---|---|---|---|
 | `SCR-MAIN` | 메인 화면 (1~8구역 가로 배치). 실행 모드: **제어 모드**(기본) / **모니터링 모드**(4.4절) | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1500×450 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow` |
-| `SCR-TESTER` | 기존모터 시험기 (별도 프로그램, 3.6절) | `ecblue_tester.bat` / `python tools/ecblue_tester.py` | 620×520, 최소 460×470 | `tools/ecblue_tester.py` / `TesterApp`, `MotorPanel` | – (신규) |
+| `SCR-TESTER` | 기존모터 시험기 (별도 프로그램, 3.6절) | `ECBLUE_TESTER.exe` / `ecblue_tester.bat` / `python tools/ecblue_tester.py` | 620×520, 최소 460×470 | `tools/ecblue_tester.py` / `TesterApp`, `MotorPanel` | – (신규) |
 | `DLG-LINE` | 구역설정 창 | `ZONE-*-BTN-SET` 클릭 | 400×300 고정, 모달 | `motor_monitor/ui/dialogs.py` / `LineSettingsDialog` | `wHOUSE` |
 | `DLG-MOTOR` (ADD) | 모터 추가 창 | `ZONE-*-BTN-ADD` 클릭 | 520×340 고정, 모달 (기존모터제어 입력줄 때문에 운영 프로그램 400×300 보다 큼) | `dialogs.py` / `MotorDialog(mode="ADD")` | `wMotor` |
 | `DLG-MOTOR` (MOD) | 모터 수정/삭제 창 | `ZONE-*-LIST` 항목 더블클릭 | 520×340 고정, 모달 | `dialogs.py` / `MotorDialog(mode="MOD")` | `wMotor` |
@@ -258,6 +258,8 @@
 - 통신: 연결 1개를 작업 쓰레드 하나가 순서대로 사용(요청 간격 0.1초, 응답 대기 2초). 끊기면 다음 요청 때 다시 접속.
 - h4(영구저장) 쓰기는 실행 1회당 모터별 3번까지만 시도(`MODE_WRITE_MAX_TRIES`).
 - i15(전류)를 지원하지 않는 펌웨어면 i14 만 읽습니다. i12 를 읽지 못하면 '-' 로 표시합니다.
+- 실행파일: `ecblue_tester.spec` → `dist/ECBLUE_TESTER.exe` (파일 하나, 콘솔 없음). Windows 에서 `build_tester_exe.bat`, 또는 GitHub Actions `Build ECblue tester exe` (main 반영 시 자동, 수동 실행 가능) 의 Artifacts. 시작 오류는 `logs/ecblue_tester_error.txt`.
+- 로그 폴더: exe 는 exe 옆 `logs`, 파이썬 실행은 프로그램 폴더 `logs`.
 - 로그: `logs/ecblue_tester_YYYYMMDD.log` (모든 동작), `logs/ecblue_monitor_YYYYMMDD.csv` (시각, ID, 응답, 실제RPM, 전류A, h1, h2, h4, 오류i12, 유지목표RPM).
 - 종료(X): 모터 설정은 바꾸지 않습니다.
 
@@ -481,7 +483,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 | `run.py` | 실행 시작점 | – |
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창), `--monitoring` 옵션 | `Application`, `MainWindow_Loaded` |
 | `run_monitoring.bat` | 모니터링 모드로 실행 (exe 가 있으면 exe, 없으면 python) | – |
-| `tools/ecblue_tester.py`, `ecblue_tester.bat` | `SCR-TESTER` 기존모터 시험기 (3.6절) | – |
+| `tools/ecblue_tester.py`, `ecblue_tester.bat`, `ecblue_tester.spec`, `build_tester_exe.bat`, `.github/workflows/build-tester-exe.yml` | `SCR-TESTER` 기존모터 시험기 (3.6절) | – |
 | `tools/ecblue_check.py` | 기존모터제어(ECblue) 현장 점검: 1단계 읽기 전용(h1~h4, i14), 2단계 `--rpm` 지정 시 `HouseLine._ctrl_job` 으로 실제 제어 시험 → 판정 → 시험 전 h1/h2/h4 복원. 임시 설정 파일 사용(운영 Config.dll 미접촉), 결과 `logs/ecblue_check_*.txt`. `--ids` 범위(170-190)·9개 이상이면 i14 만 읽어 응답 ID 찾기, `--timeout`, 응답 없을 때 받은 원시 데이터 표시 | – |
 | `update.bat` | 로컬 폴더를 GitHub `main` 최신 내용으로 업데이트 (`git pull --ff-only`, Config.dll·logs 유지) | – |
 | `motor_monitor/constants.py` | 상수(5장) | `M_Variables` |
@@ -520,6 +522,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 |---|---|---|---|
 | 1.0.0 | 2026-10-13 | 구버전 VB.NET 소스를 파이썬으로 이식 (온실 탭, 짝/홀 16라인, Config.ini) | 전체 |
 | 1.1.0 | 2026-10-13 | 한 화면 1~8구역(짝/홀 유지), 신규모터 상태 표시 | – |
+| 2.3.0 | 2026-10-14 | 기존모터 시험기 **실행파일** `ECBLUE_TESTER.exe` (단일 파일): spec·빌드 bat·GitHub Actions Windows 빌드, 로그 폴더를 exe 옆으로, 시작 오류 기록 | `SCR-TESTER`, 3.6절 |
 | 2.3.0 | 2026-10-14 | **기존모터 시험기 추가** `SCR-TESTER` (172.27.0.95, ID 180·176 고정): 접속 테스트, 현재 속도, 모니터링(CSV), 속도 지정(제어모드 설정 포함)·유지, 정지, 원래대로, 로그 파일. 시뮬레이터에 i12·i15 추가 (프로그램 동작 변경 없음) | `SCR-TESTER`, `TST-*`, 3.6절 |
 | 2.3.0 | 2026-10-14 | 현장 점검 도구 `tools/ecblue_check.py` 추가 (프로그램 동작 변경 없음) | 10장 |
 | 2.3.0 | 2026-10-14 | **화면에서 모드 전환**: 모드 표시 띠를 항상 표시(제어=초록 / 모니터링=주황, 문구도 변경)하고 오른쪽에 모드 전환 버튼 추가. 확인 후 실행 중에 즉시 전환, 창 제목·구역 버튼 문구 함께 변경. 모니터링 중 사용중지한 모터의 RPM 0 은 제어 모드로 바뀌면 전송 | `MAIN-MODE-BANNER`, `MAIN-MODE-BTN`, `MSG-MAIN-09/10`, `C-MODE-CTRL`, `C-MODE-BTN`, 4.4절 |

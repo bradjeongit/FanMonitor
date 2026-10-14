@@ -16,6 +16,7 @@ python run.py --debug      # 통신 패킷 로그 포함
 python run.py --monitoring # 모니터링 모드로 시작: 읽기만, 제어 신호 전송 안 함 (run_monitoring.bat)
                            # 실행 중에는 화면 맨 위 띠의 [모니터링 모드로 전환]/[제어 모드로 전환] 버튼으로 변경
 ecblue_tester.bat          # 기존모터 시험기 (172.27.0.95, ID 180·176 고정) - 매뉴얼 12장
+build_tester_exe.bat       # 시험기 실행파일 dist\ECBLUE_TESTER.exe 만들기 (GitHub Actions 에서도 자동 빌드)
 build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
 ```
 설정은 실행 폴더의 `Config.dll`(운영 프로그램과 같은 암호화 파일), 로그는 `logs/` 에 저장됩니다.
