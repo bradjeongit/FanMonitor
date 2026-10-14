@@ -113,30 +113,40 @@ class RoundButton(tk.Canvas):
 
 
 class ControlButton(tk.Canvas):
-    """원본 StartButton / StopButton 템플릿 (140x29, 파란 삼각형 / 빨간 사각형 아이콘)."""
+    """운영 StartButton / StopButton 템플릿 (높이 29, 구역 폭에 맞춰 늘어남, 파란 삼각형 / 빨간 사각형)."""
 
     def __init__(self, master, text: str, kind: str, command: Callable[[], None]) -> None:
         super().__init__(master, width=140, height=29, highlightthickness=0, bg=master.cget("bg"), cursor="hand2")
         self._text = text
         self._kind = kind  # "start" | "stop"
         self._command = command
-        self._draw(False)
-        self.bind("<Enter>", lambda e: self._draw(True))
-        self.bind("<Leave>", lambda e: self._draw(False))
+        self._hover = False
+        self.bind("<Configure>", lambda e: self._draw())
+        self.bind("<Enter>", lambda e: self._set_hover(True))
+        self.bind("<Leave>", lambda e: self._set_hover(False))
         self.bind("<ButtonRelease-1>", self._click)
+        self._draw()
 
-    def _draw(self, hover: bool) -> None:
+    @property
+    def text(self) -> str:
+        return self._text
+
+    def _set_hover(self, hover: bool) -> None:
+        self._hover = hover
+        self._draw()
+
+    def _draw(self) -> None:
         self.delete("all")
+        w = self.winfo_width() if self.winfo_width() > 1 else int(self["width"])
         accent = T.START_ICON if self._kind == "start" else T.STOP_ICON
-        bg = accent if hover else T.WHITE
-        icon = T.WHITE if hover else accent
-        fg = T.WHITE if hover else T.TEXT
-        _round_rect(self, 1, 1, 139, 28, 8, fill=bg, outline=T.DARK_GRAY)
+        bg = accent if self._hover else T.WHITE
+        icon = T.WHITE if self._hover else accent
+        fg = T.WHITE if self._hover else T.TEXT
+        _round_rect(self, 1, 1, w - 1, 28, 8, fill=bg, outline=T.DARK_GRAY)
         f = T.font(9, bold=True)
         import tkinter.font as tkfont
         tw = tkfont.Font(font=f).measure(self._text)
-        total = 10 + 6 + tw
-        x0 = (140 - total) // 2
+        x0 = max((w - (16 + tw)) // 2, 4)
         if self._kind == "start":
             self.create_polygon(x0, 9, x0 + 6, 14, x0, 20, fill=icon, outline="")
         else:
@@ -144,7 +154,7 @@ class ControlButton(tk.Canvas):
         self.create_text(x0 + 16, 15, text=self._text, anchor="w", fill=fg, font=f)
 
     def _click(self, e) -> None:
-        if 0 <= e.x <= 140 and 0 <= e.y <= 29:
+        if 0 <= e.x <= self.winfo_width() and 0 <= e.y <= 29:
             self._command()
 
 
@@ -199,11 +209,31 @@ class MotorListView(tk.Frame):
 
     HEADER_H = 25
     ROW_H = 26
-    COL0 = 35
-    COL1 = 60
+    COL0 = 32      # 운영 ListView_SizeChanged: 32 / 42 / 나머지
+    COL1 = 42
     COLUMNS = ("", "ID", "상태")
     SORT_KEYS = {"": "MTYPE", "ID": "ID", "상태": "STATUS"}
-    STATUS_TIPS = {MotorStatus.OK: "정상", MotorStatus.ERR: "이상", MotorStatus.NOTUSE: "중지(사용안함)"}
+    STATUS_ICON_W = 22
+
+    @staticmethod
+    def status_icon(m: Motor):
+        """상태 그림 이름과 툴팁 (운영 StatusTemplate). 대기는 그림 없음."""
+        if m.status == MotorStatus.OK:
+            return ("bad_haderr", "정상(이상기록있음)") if m.had_err else ("good", "정상")
+        if m.status == MotorStatus.ERR:
+            return "bad_new", "이상"
+        if m.status == MotorStatus.NOTUSE:
+            return "nouse_new", "중지(사용안함)"
+        return None, ""
+
+    @staticmethod
+    def type_icon(m: Motor):
+        """종류 그림 이름과 툴팁 (운영 MotorTypeTemplate)."""
+        if m.mtype == MotorType.OLD_MOTOR:
+            return "oldmotor", "기존모터"
+        if m.use_limit:
+            return "newmotor_limit", "신규모터(제한모드)"
+        return "newmotor", "신규모터"
 
     def __init__(self, master, images: T.Images,
                  on_header_click: Callable[[str], None],
@@ -258,13 +288,9 @@ class MotorListView(tk.Frame):
         return self._selected_key
 
     # --- 그리기 ---
-    NARROW_WIDTH = 200   # 목록 폭이 이보다 좁으면 ID 열을 줄여 상태 열 확보
-    COL1_NARROW = 40
-
     def _col_x(self):
         w = self._width
-        c1 = self.COL1 if w >= self.NARROW_WIDTH else self.COL1_NARROW
-        return 0, self.COL0, self.COL0 + c1, w
+        return 0, self.COL0, self.COL0 + self.COL1, w
 
     def _on_resize(self, e) -> None:
         # 원본 ListView_SizeChanged: 0열 35, 1열 60, 2열 = 나머지
@@ -307,20 +333,21 @@ class MotorListView(tk.Frame):
             elif i == self._hover_idx:
                 c.create_rectangle(0, y, w, y + self.ROW_H - 1, fill=T.LIST_HOVER, outline="")
             cy = y + self.ROW_H // 2
-            tname = "oldmotor" if m.mtype == MotorType.OLD_MOTOR else "newmotor"
+            tname, _ = self.type_icon(m)
             c.create_image((x[0] + x[1]) // 2, cy, image=self.images.get(tname, 20))
             c.create_text((x[1] + x[2]) // 2, cy, text=str(m.id), font=T.font(9))
             self._draw_status(c, m, x[2], x[3], cy)
         c.configure(scrollregion=(0, 0, w, max(len(self._rows) * self.ROW_H, 1)))
 
     def _draw_status(self, c: tk.Canvas, m: Motor, x1: int, x2: int, cy: int) -> None:
-        icon = {MotorStatus.OK: "good", MotorStatus.ERR: "bad", MotorStatus.NOTUSE: "nouse"}.get(m.status)
-        if icon:   # 대기(9)는 원본처럼 그림 없음
-            c.create_image(x1 + 17, cy, image=self.images.get(icon, 20))
+        """운영 StatusTemplate: 정상/이상은 RPM 숫자(이상은 빨강 굵게), 중지/대기는 연회색 굵은 글씨."""
+        icon, _ = self.status_icon(m)
+        if icon:
+            c.create_image(x1 + self.STATUS_ICON_W // 2 + 1, cy, image=self.images.get(icon, 20))
         if m.status == MotorStatus.OK:
             text, fg, bold = str(m.rpm), T.TEXT, False
         elif m.status == MotorStatus.ERR:
-            text, fg, bold = "이상", T.STATUS_ERR_FG, True
+            text, fg, bold = str(m.rpm), T.STATUS_ERR_FG, True
         elif m.status == MotorStatus.NOTUSE:
             text, fg, bold = "중지", T.STATUS_DIM_FG, True
         else:
@@ -390,7 +417,9 @@ class MotorListView(tk.Frame):
             m = self._rows[idx]
             xs = self._col_x()
             if xs[0] <= x < xs[1]:
-                return "기존모터" if m.mtype == MotorType.OLD_MOTOR else "신규모터"
-            if xs[2] <= x < xs[2] + 35 and m.status in self.STATUS_TIPS:
-                return self.STATUS_TIPS[m.status]
+                return self.type_icon(m)[1]
+            if xs[2] <= x < xs[2] + self.STATUS_ICON_W + 2:
+                tip = self.status_icon(m)[1]
+                if tip:
+                    return tip
         return "항목 더블클릭시 수정/삭제"

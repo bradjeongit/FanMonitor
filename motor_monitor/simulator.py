@@ -4,7 +4,7 @@
   python -m motor_monitor.simulator --port 5020 --old 5:950,6:1000 --new 10,11
   -> 127.0.0.1:5020 에 기존모터 ID5(950RPM), ID6(1000RPM) 와 신규모터 ID10, ID11 이 있는 게이트웨이 생성
 
-라인설정 창에서 기존모터/신규모터 IP 를 127.0.0.1, PORT 를 시뮬레이터 포트로 지정해 시험합니다.
+구역설정 창에서 기존모터/신규모터 IP 를 127.0.0.1, PORT 를 시뮬레이터 포트로 지정해 시험합니다.
 """
 from __future__ import annotations
 
@@ -22,7 +22,8 @@ log = logging.getLogger("motor_monitor.simulator")
 
 
 class FakeGateway:
-    """기존모터(FC04 레지스터14)와 신규모터(FC03/FC06 레지스터 0x13~0x19)를 흉내냄."""
+    """기존모터(FC04 레지스터14)와 신규모터(FC03 0x00~0x08, 0x13~0x19 / FC06)를 흉내냄.
+    신규모터 현재 RPM(0x05)은 동작(0x14=1) 중이면 설정 RPM(0x16)을 따라가고, 정지면 0."""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
         self.old_rpm: Dict[int, int] = {}
@@ -45,7 +46,7 @@ class FakeGateway:
 
     def add_new(self, uid: int, automanual: int = 0, startstop: int = 0, rpm: int = 0) -> None:
         with self._lock:
-            regs = {r: 0 for r in range(modbus.NEW_READ_START, modbus.NEW_READ_START + modbus.NEW_READ_COUNT)}
+            regs = {r: 0 for r in range(0, modbus.NEW_READ_START + modbus.NEW_READ_COUNT)}
             regs[modbus.NEW_REG_AUTOMANUAL] = automanual
             regs[modbus.NEW_REG_STARTSTOP] = startstop
             regs[modbus.NEW_REG_RPM] = rpm
@@ -112,6 +113,8 @@ class FakeGateway:
                 pdu = struct.pack(">BBH", fc, 2, self.old_rpm[uid] & 0xFFFF)
             elif fc == modbus.FC_READ_HOLDING and uid in self.new_regs:
                 regs = self.new_regs[uid]
+                running = regs[modbus.NEW_REG_STARTSTOP] == 1
+                regs[modbus.NEW_REG_ACTUAL_RPM] = regs[modbus.NEW_REG_RPM] if running else 0
                 values = [regs.get(addr + i, 0) for i in range(val)]
                 pdu = struct.pack(">BB", fc, val * 2) + b"".join(struct.pack(">H", v) for v in values)
             elif fc == modbus.FC_WRITE_SINGLE and uid in self.new_regs:

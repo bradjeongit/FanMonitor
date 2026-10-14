@@ -1,9 +1,7 @@
-"""메인 화면 (SCR-MAIN). 원본: MainWindow.xaml / MainWindow.xaml.vb
+"""메인 화면 (SCR-MAIN). 기준: 운영 실행파일 MainWindow
 
-구성 (v1.1.0: 원본의 온실1/온실2 탭을 없애고 한 화면에 1~8구역 표시)
-  상단: 1~4구역 / 5~8구역 제어 시작·종료 버튼
-  본문: 4열x2행 구역 패널(윗줄 1~4구역=온실1, 아랫줄 5~8구역=온실2), 각 구역은 짝/홀 라인 패널 2개
-  라인 패널: 머리 영역(통신상태 점, IP/PORT, RPM 소스, 설정/추가 버튼) + 모터 목록
+구성: 1~8구역을 가로 8열로 배치. 구역 패널마다
+  제목줄(n구역) / 제어 시작·종료 버튼 / 머리 영역(통신상태 점, IP/PORT, RPM 소스, 설정·추가 버튼) / 모터 목록
 """
 from __future__ import annotations
 
@@ -13,7 +11,7 @@ from tkinter import messagebox
 from typing import Dict
 
 from .. import constants as C
-from ..helpers import get_house_short_name, zone_number
+from ..helpers import get_house_name, zone_number
 from ..plant import Plant
 from . import theme as T
 from .dialogs import LineSettingsDialog, MotorDialog
@@ -21,36 +19,46 @@ from .widgets import ControlButton, ImageButton, MotorListView, StatusDot, Toolt
 
 log = logging.getLogger(__name__)
 
-LIST_REFRESH_MS = 300   # 모터 목록 변경 확인 주기 (원본은 데이터 바인딩으로 즉시 반영)
+LIST_REFRESH_MS = 300   # 모터 목록 변경 확인 주기 (운영 프로그램은 데이터 바인딩으로 즉시 반영)
 
 
-class LinePanel(tk.Frame):
-    """라인 1개(예: 1구역 짝) 영역. 스펙시트 LINE-{코드}"""
+class ZonePanel(tk.Frame):
+    """구역 1개(GroupBox). 스펙시트 ZONE-{n}"""
 
     def __init__(self, master, app: "MainWindow", code: str) -> None:
-        super().__init__(master, bg=T.WHITE)
+        super().__init__(master, bg=T.GROUP_BORDER, padx=1, pady=1)
         self.app = app
         self.code = code
         img = app.images
-        side_even = code[4] == "E"
+        inner = tk.Frame(self, bg=T.WHITE, padx=3, pady=3)
+        inner.pack(fill="both", expand=True)
 
-        head = tk.Frame(self, bg=T.WHITE, height=60)
+        # 제목줄
+        title = tk.Frame(inner, bg=T.ZONE_TITLE_BG)
+        title.pack(side="top", fill="x", pady=3)
+        tk.Label(title, text=get_house_name(code), bg=T.ZONE_TITLE_BG, fg=T.WHITE,
+                 font=T.font(9, bold=True)).pack(pady=3)
+
+        # 제어 시작/종료 버튼 (같은 자리에서 번갈아 표시)
+        n = zone_number(code)
+        btn_row = tk.Frame(inner, bg=T.WHITE, height=33)
+        btn_row.pack(side="top", fill="x")
+        btn_row.pack_propagate(False)
+        self.StartBtn = ControlButton(btn_row, f"{n}구역 제어 시작", "start", self.on_start)
+        self.StopBtn = ControlButton(btn_row, f"{n}구역 제어 종료", "stop", self.on_stop)
+        self.show_running(False)
+
+        # 머리 영역 (높이 60)
+        head = tk.Frame(inner, bg=T.WHITE, height=60)
         head.pack(side="top", fill="x")
         head.grid_propagate(False)
-        head.columnconfigure(1, weight=1)
+        head.columnconfigure(0, weight=1)
         for r in range(3):
             head.rowconfigure(r, weight=1, uniform="h")
 
-        # 짝/홀 색상 표시
-        side = tk.Frame(head, bg=T.SIDE_EVEN_BG if side_even else T.SIDE_ODD_BG, width=21)
-        side.grid(row=0, column=0, rowspan=3, sticky="ns", padx=(5, 0), pady=(0, 2))
-        side.grid_propagate(False)
-        tk.Label(side, text="짝" if side_even else "홀", fg=T.WHITE,
-                 bg=side.cget("bg"), font=T.font(9)).place(relx=0.5, rely=0.5, anchor="center")
-
         def info_row(r: int, icon, tip: str):
             f = tk.Frame(head, bg=T.WHITE)
-            f.grid(row=r, column=1, sticky="ew", padx=(5, 0))
+            f.grid(row=r, column=0, sticky="ew", padx=(5, 0))
             if icon is not None:
                 lb = tk.Label(f, image=icon, bg=T.WHITE, bd=0)
                 Tooltip(lb, tip)
@@ -61,7 +69,7 @@ class LinePanel(tk.Frame):
             dot.pack(side="left", padx=(5, 0))
             lbl = tk.Label(f, text="-", bg=T.WHITE, bd=0, font=T.font(9), anchor="w")
             lbl.pack(side="left", padx=(5, 0), fill="x", expand=True)
-            # 화면이 좁아 글자가 잘릴 때를 위해 전체 문구를 툴팁으로 표시
+            # 폭이 좁아 글자가 잘릴 때를 위해 전체 문구를 툴팁으로 표시
             Tooltip(lbl, lambda x, y, lbl=lbl: lbl.cget("text"))
             return dot, lbl
 
@@ -70,34 +78,58 @@ class LinePanel(tk.Frame):
         self.rec_SID_NETSTATUS, self.lbl_source = info_row(2, None, "")
 
         btns = tk.Frame(head, bg=T.WHITE, width=30)
-        btns.grid(row=0, column=2, rowspan=3, sticky="ns")
+        btns.grid(row=0, column=1, rowspan=3, sticky="ns")
         self.Btn_Settings = ImageButton(btns, img.get("settings", 22), "설정", self.open_settings)
         self.Btn_Settings.pack(side="top", padx=4, pady=(2, 0))
         self.Btn_Add = ImageButton(btns, img.get("add", 22), "추가", self.open_add)
         self.Btn_Add.pack(side="bottom", padx=4, pady=(0, 2))
 
-        self.LV = MotorListView(self, img, on_header_click=self.on_sort, on_double_click=self.open_modify)
-        self.LV.pack(side="top", fill="both", expand=True, padx=5)
+        # 모터 목록
+        self.LV = MotorListView(inner, img, on_header_click=self.on_sort, on_double_click=self.open_modify)
+        self.LV.pack(side="top", fill="both", expand=True, padx=2)
         self._version = -1
 
-    # --- 동작 ---
+    # --- 제어 버튼 (운영 H1_StartBtn_Click / H1_StopBtn_Click) ---
+    def show_running(self, running: bool) -> None:
+        if running:
+            self.StartBtn.place_forget()
+            self.StopBtn.place(x=0, y=2, relwidth=1)
+        else:
+            self.StopBtn.place_forget()
+            self.StartBtn.place(x=0, y=2, relwidth=1)
+
+    def on_start(self) -> None:
+        name = get_house_name(self.code)
+        if messagebox.askyesno("제어", f"{name} 제어를 시작하시겠습니까?", parent=self.app.root):
+            self.app.plant.start_line(self.code)
+            self.show_running(True)
+            self.app.update_network_status()
+
+    def on_stop(self) -> None:
+        name = get_house_name(self.code)
+        if messagebox.askyesno("제어", f"{name} 제어를 종료하시겠습니까?", parent=self.app.root):
+            self.app.plant.stop_line(self.code)
+            self.show_running(False)
+            self.app.update_network_status()
+
+    # --- 대화상자 ---
     def open_settings(self) -> None:
-        """설정(톱니) 버튼 -> 라인설정 창 (원본 Btn_Setting_Click)"""
+        """설정(톱니) 버튼 -> 구역설정 창"""
         LineSettingsDialog(self.app.root, self.app.plant, self.code,
                            on_saved=self.app.update_header_box).show_modal()
 
     def open_add(self) -> None:
-        """추가(+) 버튼 -> 모터 추가 창 (원본 Btn_Add_Click)"""
+        """추가(+) 버튼 -> 모터 추가 창"""
         MotorDialog(self.app.root, self.app.plant, self.app.images, self.code, "ADD",
                     on_changed=self.refresh).show_modal()
 
     def open_modify(self, dkey: str) -> None:
-        """목록 더블클릭 -> 모터 수정/삭제 창 (원본 Lv_DBClick)"""
+        """목록 더블클릭 -> 모터 수정/삭제 창"""
         MotorDialog(self.app.root, self.app.plant, self.app.images, self.code, "MOD", mod_dkey=dkey,
                     on_changed=self.refresh).show_modal()
 
     def on_sort(self, skey: str) -> None:
-        """목록 머리글 클릭 -> 정렬 (원본 lvHeader_CLICK)"""
+        """목록 머리글 클릭 -> 정렬"""
         self.app.plant.houses[self.code].sort(skey)
         self.refresh()
 
@@ -106,29 +138,6 @@ class LinePanel(tk.Frame):
         if force or h.version != self._version:
             self._version = h.version
             self.LV.set_rows(h.get_list())
-
-
-class ZonePanel(tk.Frame):
-    """구역 1개(GroupBox): 제목줄 + 짝/홀 라인 패널. 스펙시트 ZONE-{1~8}"""
-
-    def __init__(self, master, app: "MainWindow", house: str, zone: int) -> None:
-        """house: 'H1'/'H2', zone: 온실 내 구역번호 1~4 (화면 표시는 1~8구역)"""
-        super().__init__(master, bg=T.GROUP_BORDER, padx=1, pady=1)
-        inner = tk.Frame(self, bg=T.WHITE, padx=3, pady=3)
-        inner.pack(fill="both", expand=True)
-        inner.columnconfigure(0, weight=1, uniform="c")
-        inner.columnconfigure(1, weight=1, uniform="c")
-        inner.rowconfigure(1, weight=1)
-        title = tk.Frame(inner, bg=T.ZONE_TITLE_BG)
-        title.grid(row=0, column=0, columnspan=2, sticky="ew", pady=3)
-        tk.Label(title, text=f"{zone_number(f'{house}R{zone}E')}구역", bg=T.ZONE_TITLE_BG, fg=T.WHITE,
-                 font=T.font(9, bold=True)).pack(pady=3)
-        self.lines: Dict[str, LinePanel] = {}
-        for col, side in enumerate(("E", "O")):
-            code = f"{house}R{zone}{side}"
-            lp = LinePanel(inner, app, code)
-            lp.grid(row=1, column=col, sticky="nsew")
-            self.lines[code] = lp
 
 
 class MainWindow:
@@ -141,45 +150,27 @@ class MainWindow:
         self.images = T.Images(root)
 
         root.title(C.APP_TITLE)
-        root.minsize(1280, 700)
+        root.minsize(1500, 450)          # 운영 MinWidth=1500, MinHeight=450
         root.geometry("1600x900")
         if T.IS_WINDOWS:
             try:
-                root.state("zoomed")     # 8개 구역을 넓게 보도록 최대화로 시작
+                root.state("zoomed")
             except tk.TclError:
                 pass
         root.configure(bg=T.WHITE)
         T.set_window_icon(root)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # --- 상단 제어 버튼 줄 ---
-        top = tk.Frame(root, bg=T.WHITE, height=34)
-        top.pack(side="top", fill="x", padx=5)
-        top.pack_propagate(False)
-        self.H1_StartBtn = ControlButton(top, "1~4구역 제어 시작", "start", self.on_h1_start)
-        self.H1_StopBtn = ControlButton(top, "1~4구역 제어 종료", "stop", self.on_h1_stop)
-        self.H2_StartBtn = ControlButton(top, "5~8구역 제어 시작", "start", self.on_h2_start)
-        self.H2_StopBtn = ControlButton(top, "5~8구역 제어 종료", "stop", self.on_h2_stop)
-        self._show_ctrl("H1", running=False)
-        self._show_ctrl("H2", running=False)
-
-        # --- 구역 패널 4열 x 2행 ---
         self.content = tk.Frame(root, bg=T.WHITE)
-        self.content.pack(side="top", fill="both", expand=True, padx=2, pady=(0, 2))
-        self.line_panels: Dict[str, LinePanel] = {}
-        self.zone_panels: Dict[int, ZonePanel] = {}
-        for c in range(4):
-            self.content.columnconfigure(c, weight=1, uniform="c")
-        for r in range(2):
-            self.content.rowconfigure(r, weight=1, uniform="r")
-        for row, house in enumerate(("H1", "H2")):
-            for zone in range(1, 5):
-                zp = ZonePanel(self.content, self, house, zone)
-                zp.grid(row=row, column=zone - 1, sticky="nsew", padx=3, pady=3)
-                self.zone_panels[row * 4 + zone] = zp
-                self.line_panels.update(zp.lines)
+        self.content.pack(fill="both", expand=True, padx=2, pady=2)
+        self.content.rowconfigure(0, weight=1)
+        self.zone_panels: Dict[str, ZonePanel] = {}
+        for i, code in enumerate(C.HOUSE_LINES):
+            self.content.columnconfigure(i, weight=1, uniform="z")
+            zp = ZonePanel(self.content, self, code)
+            zp.grid(row=0, column=i, sticky="nsew", padx=3, pady=3)
+            self.zone_panels[code] = zp
 
-        # --- 초기화 (원본 MainWindow_Loaded) ---
         self.update_header_box()
         self.refresh_lists(force=True)
         self.update_network_status()
@@ -188,7 +179,7 @@ class MainWindow:
 
     # ------------------------------------------------------------ 타이머
     def _tick(self) -> None:
-        """5초 주기: 모터 상태 갱신(원본 TMR_STATUS_UPDATER) + 통신상태 표시(원본 TMR_UPDATE)"""
+        """5초 주기: 모터 상태 갱신(제어 중인 구역) + 통신상태 점 갱신"""
         try:
             self.plant.update_all_status()
             self.update_network_status()
@@ -204,75 +195,36 @@ class MainWindow:
         self.root.after(LIST_REFRESH_MS, self._list_tick)
 
     def refresh_lists(self, force: bool) -> None:
-        for lp in self.line_panels.values():
-            lp.refresh(force=force)
+        for zp in self.zone_panels.values():
+            zp.refresh(force=force)
 
     # ------------------------------------------------------------ 표시
-    def _show_ctrl(self, house: str, running: bool) -> None:
-        start = getattr(self, f"{house}_StartBtn")
-        stop = getattr(self, f"{house}_StopBtn")
-        x = 0 if house == "H1" else 150
-        if running:
-            start.place_forget()
-            stop.place(x=x, y=3)
-        else:
-            stop.place_forget()
-            start.place(x=x, y=3)
-
     def update_header_box(self) -> None:
-        """라인 머리 영역의 IP/PORT, RPM 소스 문구 갱신 (원본 Update_HeaderBox)"""
-        for code, lp in self.line_panels.items():
+        """구역 머리 영역의 IP/PORT, RPM 소스 문구 갱신 (운영 Update_HeaderBox)"""
+        for code, zp in self.zone_panels.items():
             cfg = self.plant.configs[code]
-            lp.lbl_old_ip.configure(text=f"{cfg.source_ip}/{cfg.source_port}")
-            lp.lbl_new_ip.configure(text=f"{cfg.target_ip}/{cfg.target_port}")
+            zp.lbl_old_ip.configure(text=f"{cfg.source_ip}/{cfg.source_port}")
+            zp.lbl_new_ip.configure(text=f"{cfg.target_ip}/{cfg.target_port}")
             if cfg.source_manual:
-                lp.lbl_source.configure(text=f"수동 > {cfg.manual_rpm} RPM")
+                zp.lbl_source.configure(text=f"수동 > {cfg.manual_rpm} RPM")
             else:
-                lp.lbl_source.configure(text=f"{get_house_short_name(cfg.source_line, ' > ')} > {cfg.source_id}")
+                zp.lbl_source.configure(text=f"{get_house_name(cfg.source_line)} > {cfg.source_id}")
 
     def update_network_status(self) -> None:
-        """통신상태 점 색상 갱신 (원본 Update_Network_Status)"""
-        for code, lp in self.line_panels.items():
-            run = self.plant.network_run.get(code[:2], False)
+        """통신상태 점 색상 갱신 (운영 Update_Network_Status)"""
+        for code, zp in self.zone_panels.items():
             h = self.plant.houses[code]
-            if run:
-                lp.rec_SOURCE_NETSTATUS.set_color(T.NET_OK if h.source_net_status else T.NET_ERR)
-                lp.rec_TARGET_NETSTATUS.set_color(T.NET_OK if h.target_net_status else T.NET_ERR)
-                lp.rec_SID_NETSTATUS.set_color(T.NET_OK if self.plant.reference_ok(code) else T.NET_ERR)
+            if h.running:
+                zp.rec_SOURCE_NETSTATUS.set_color(T.NET_OK if h.source_net_status else T.NET_ERR)
+                zp.rec_TARGET_NETSTATUS.set_color(T.NET_OK if h.target_net_status else T.NET_ERR)
+                zp.rec_SID_NETSTATUS.set_color(T.NET_OK if self.plant.reference_ok(code) else T.NET_ERR)
             else:
-                for d in (lp.rec_SOURCE_NETSTATUS, lp.rec_TARGET_NETSTATUS, lp.rec_SID_NETSTATUS):
+                for d in (zp.rec_SOURCE_NETSTATUS, zp.rec_TARGET_NETSTATUS, zp.rec_SID_NETSTATUS):
                     d.set_color(T.NET_STOP)
-
-    # ------------------------------------------------------------ 제어 버튼
-    def _start(self, house: str, name: str) -> None:
-        if messagebox.askyesno("제어", f"{name} 제어를 시작하시겠습니까?", parent=self.root):
-            self.plant.start_house(house)
-            self._show_ctrl(house, running=True)
-            self.update_network_status()
-
-    def _stop(self, house: str, name: str) -> None:
-        if messagebox.askyesno("제어", f"{name} 제어를 종료하시겠습니까?", parent=self.root):
-            self.plant.stop_house(house)
-            self._show_ctrl(house, running=False)
-            self.update_network_status()
-
-    def on_h1_start(self) -> None:
-        self._start("H1", "1~4구역")
-
-    def on_h1_stop(self) -> None:
-        self._stop("H1", "1~4구역")
-
-    def on_h2_start(self) -> None:
-        if C.H2_CONTROL_ENABLED:      # 원본(v1.0.0 이전): 버튼은 보이지만 동작하지 않음
-            self._start("H2", "5~8구역")
-
-    def on_h2_stop(self) -> None:
-        if C.H2_CONTROL_ENABLED:
-            self._stop("H2", "5~8구역")
 
     # ------------------------------------------------------------ 종료
     def on_close(self) -> None:
-        """창 닫기 (원본 MainWindow_Closing)"""
+        """창 닫기 (운영 MainWindow_Closing)"""
         if messagebox.askyesno("종료", "종료하시겠습니까? 종료시 제어기능이 동작하지 않습니다.", parent=self.root):
             try:
                 self.plant.shutdown()

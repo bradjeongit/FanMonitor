@@ -1,4 +1,4 @@
-"""화면 색상/글꼴/이미지. 원본 XAML 의 색상값을 그대로 옮겼습니다.
+"""화면 색상/글꼴/이미지. 운영 실행파일 XAML 의 색상값을 그대로 옮겼습니다.
 
 스펙시트(docs/SPEC_SHEET.md) '5. 색상/스타일' 항목과 1:1 대응합니다.
 """
@@ -25,8 +25,6 @@ DARK_GRAY = "#a9a9a9"           # WPF DarkGray
 GROUP_BORDER = "#d5dfe5"        # WPF GroupBox 기본 테두리
 
 ZONE_TITLE_BG = "#34495e"
-SIDE_EVEN_BG = "#f39c12"        # 짝
-SIDE_ODD_BG = "#2980b9"         # 홀
 
 NET_OK = "#2980b9"              # RGB(41,128,185)
 NET_ERR = "#c0392b"             # RGB(192,57,43)

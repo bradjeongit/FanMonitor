@@ -6,3 +6,5 @@ dist/
 logs/
 Config.ini
 *.lock
+Config.dll
+uconfig.dll

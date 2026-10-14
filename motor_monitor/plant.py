@@ -1,4 +1,4 @@
-"""전체 라인/설정을 묶는 모델. 원본: M_Variables.vb(HOUSES, MCONFIG) + M_Config.vb
+"""전체 구역/설정을 묶는 모델. 기준: 운영 M_Variables(HOUSES, MCONFIG) + M_Config
 
 화면(UI)과 통신 로직 사이의 단일 진입점입니다.
 """
@@ -20,24 +20,23 @@ class Plant:
         self.config_path = config_path or cfgmod.default_config_path()
         self.houses: Dict[str, HouseLine] = {}
         self.configs: Dict[str, LineConfig] = {}
-        # 온실별 제어 실행 여부 (원본 H1_NETWORK_RUN / H2_NETWORK_RUN)
-        self.network_run: Dict[str, bool] = {"H1": False, "H2": False}
 
     # ------------------------------------------------------------- 설정
     def load(self) -> None:
-        """원본 Get_Local_Config: 라인 생성 -> 설정 읽기 -> 모터 등록 -> 설정 다시 쓰기."""
+        """운영 Get_Local_Config: 구역 생성 -> 설정 읽기 -> 모터 등록 -> 설정 다시 저장.
+        설정 파일을 해독할 수 없으면 ConfigError (기존 파일을 덮어쓰지 않음)."""
         configs, motors = cfgmod.load_config(self.config_path)
         self.configs = configs
         self.houses = {}
         for s in HOUSE_LINES:
             h = HouseLine(s, self)
-            for mid, mtype, use in motors.get(s, []):
-                h.add_motor(mid, mtype, use)
+            for e in motors.get(s, []):
+                h.add_motor(e.id, e.mtype, e.use, e.use_limit, e.limit_rpm)
             self.houses[s] = h
         self.save()
 
     def save(self) -> None:
-        """원본 Put_Local_Config"""
+        """운영 Put_Local_Config"""
         motors = {s: self.houses[s].export_motors() for s in HOUSE_LINES}
         try:
             cfgmod.save_config(self.config_path, self.configs, motors)
@@ -51,7 +50,7 @@ class Plant:
 
     # ------------------------------------------------------------- 조회
     def find_reference_users(self, line_code: str, motor_id: int) -> List[str]:
-        """해당 기존모터를 참조 RPM 소스로 쓰는 라인 목록 (삭제 전 확인용)."""
+        """해당 기존모터를 참조 RPM 소스로 쓰는 구역 목록 (삭제 전 확인용)."""
         return [
             s for s in HOUSE_LINES
             if not self.configs[s].source_manual
@@ -60,7 +59,7 @@ class Plant:
         ]
 
     def reference_ok(self, code: str) -> bool:
-        """라인 헤더의 참조 상태 표시용: 수동이면 항상 정상, 참조이면 참조 모터가 정상인지."""
+        """RPM 소스 상태 점: 수동이면 정상, 참조이면 참조 모터가 '정상'일 때만 정상."""
         cfg = self.configs[code]
         if cfg.source_manual:
             return True
@@ -71,25 +70,20 @@ class Plant:
         return m is not None and m.status == MotorStatus.OK
 
     # ------------------------------------------------------------- 제어
-    def lines_of(self, house_prefix: str) -> List[str]:
-        return [s for s in HOUSE_LINES if s[:2] == house_prefix]
+    def start_line(self, code: str) -> None:
+        self.houses[code].service_start()
 
-    def start_house(self, house_prefix: str) -> None:
-        for s in self.lines_of(house_prefix):
-            self.houses[s].service_start()
-        self.network_run[house_prefix] = True
-
-    def stop_house(self, house_prefix: str) -> None:
-        for s in self.lines_of(house_prefix):
-            self.houses[s].service_stop()
-        self.network_run[house_prefix] = False
+    def stop_line(self, code: str) -> None:
+        self.houses[code].service_stop()
 
     def update_all_status(self) -> None:
+        """제어 중인 구역만 상태 갱신 (운영: 상태 타이머는 구역 제어 시작 시 켜지고 종료 시 꺼짐)."""
         for h in self.houses.values():
-            h.update_status()
+            if h.running:
+                h.update_status()
 
     def shutdown(self) -> None:
-        """프로그램 종료: 설정 저장 후 모든 서비스 종료 (원본 MainWindow_Closing)."""
+        """프로그램 종료: 설정 저장 후 모든 구역 제어 종료."""
         try:
             self.save()
         finally:

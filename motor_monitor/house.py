@@ -1,9 +1,10 @@
-"""라인(구역/짝홀) 단위 모터 관리 및 Modbus TCP 송수신. 원본: C_HOUSE.vb
+"""구역 단위 모터 관리 및 Modbus TCP 송수신. 기준: 운영 실행파일 C_HOUSE
 
-- 라인 1개 = 기존모터 게이트웨이 1개(SOURCE) + 신규모터 게이트웨이 1개(TARGET)
-- 기존모터: 주기적으로 RPM 을 읽어 저장
-- 신규모터: 상태를 읽고, 수동/동작/RPM 이 목표와 다르면 써넣어 맞춤
-  (목표 RPM = 라인설정의 수동RPM 또는 참조 기존모터의 현재 RPM)
+- 구역 1개 = 기존모터 게이트웨이 1개(SOURCE) + 신규모터 게이트웨이 1개(TARGET)
+- 기존모터: RPM 을 읽어 저장
+- 신규모터: 1페이지(현재 RPM)와 2페이지(수동/동작/RPM설정)를 읽고, 2페이지 값이 목표와 다르면 써넣음
+  목표 RPM = 수동RPM 또는 참조 기존모터 RPM, 속도제한 사용 시 최대속도 이하로 제한
+- 상태: 응답 수신 = 정상, 명령 후 60초 무응답 = '이상기록', 마지막 응답 후 1시간 = 이상
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ from typing import TYPE_CHECKING, Callable, Deque, Dict, List, Optional
 
 from . import constants as C
 from . import modbus
+from .config import MotorEntry
 from .constants import MotorStatus, MotorType
 
 if TYPE_CHECKING:
@@ -24,13 +26,13 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("motor_monitor.house")
 
-# 디버그 출력 대상 (원본 DEBUG_LINE / DEBUG_IDS). 로그 레벨이 DEBUG 일 때만 출력됩니다.
-DEBUG_LINE = "ALL"          # 라인코드 또는 "ALL"
-DEBUG_IDS = {5, 50}         # 출력할 모터 ID (0 은 라인 공통 메시지로 항상 출력)
+# 디버그 출력 대상 (운영 DEBUG_LINE / DEBUG_IDS). 로그 레벨이 DEBUG 일 때만 출력됩니다.
+DEBUG_LINE = "ALL"          # 구역코드 또는 "ALL"
+DEBUG_IDS = {5, 50}         # 출력할 모터 ID (0 은 구역 공통 메시지로 항상 출력)
 
 
 def motor_key(mtype: MotorType, mid: int) -> str:
-    """모터 고유 키 '종류_ID' (예: '0_5'). 원본 dic_key 와 같은 형식."""
+    """모터 고유 키 '종류_ID' (예: '0_5')."""
     return f"{int(mtype)}_{mid}"
 
 
@@ -39,14 +41,21 @@ class Motor:
     id: int
     mtype: MotorType
     use: bool
-    rpm: int = 0
-    rdate: Optional[float] = None     # 최근 수신 시각(time.monotonic), None = 수신 이력 없음
+    use_limit: bool = False           # 속도제한 사용 (신규모터)
+    limit_rpm: int = 0                # 속도제한 최대 RPM
+    rpm: int = 0                      # 표시 RPM (기존: 현재 RPM, 신규: 레지스터 0x05)
+    rdate: Optional[float] = None     # 마지막 응답 시각 (time.monotonic)
+    check_since: Optional[float] = None  # 응답 대기 시작 시각 (명령 전송 시 기록, 응답 시 해제)
+    had_err: bool = False             # 60초 무응답 이력 (구역 제어를 다시 시작할 때까지 유지)
     status: MotorStatus = MotorStatus.READY
     must_send_zero: bool = False      # 사용중지 선택 시 RPM 0 을 1회 보내기 위한 표시
 
     @property
     def key(self) -> str:
         return motor_key(self.mtype, self.id)
+
+    def entry(self) -> MotorEntry:
+        return MotorEntry(self.id, self.mtype, self.use, self.use_limit, self.limit_rpm)
 
 
 @dataclass
@@ -100,7 +109,7 @@ class _Channel:
 
 
 class HouseLine:
-    """라인 1개. 원본 C_HOUSE 클래스."""
+    """구역 1개. 운영 C_HOUSE 클래스."""
 
     def __init__(self, code: str, plant: "Plant", clock: Callable[[], float] = time.monotonic) -> None:
         self.code = code
@@ -108,8 +117,8 @@ class HouseLine:
         self._clock = clock
         self._lock = threading.RLock()
 
-        self._motors: Dict[str, Motor] = {}   # 등록 순서 유지
-        self._order: List[str] = []           # 화면 표시 순서 (원본 _LIST)
+        self._motors: Dict[str, Motor] = {}   # 등록 순서 유지 (설정 저장 순서)
+        self._order: List[str] = []           # 화면 표시 순서
         self._sort_key = ""
         self._sort_desc = False
         self.version = 0                      # 데이터가 바뀔 때마다 증가 (화면 갱신 판단용)
@@ -137,6 +146,7 @@ class HouseLine:
 
     @property
     def running(self) -> bool:
+        """구역 제어 중 여부 (운영 RUN_OX)"""
         return not self._stop.is_set()
 
     def _touch(self) -> None:
@@ -158,22 +168,23 @@ class HouseLine:
             return replace(m) if m else None
 
     def get_old_motor_ids(self) -> List[str]:
-        """등록된 기존모터 ID 목록(등록 순서). 원본 Get_OLDMOTOR_List"""
+        """등록된 기존모터 ID 목록(등록 순서). 운영 Get_OLDMOTOR_List"""
         with self._lock:
             return [str(m.id) for m in self._motors.values() if m.mtype == MotorType.OLD_MOTOR]
 
-    def export_motors(self) -> List[tuple]:
-        """설정 저장용 (id, type, use) 목록 - 화면 표시 순서. 원본 Put_Local_Config 과 동일."""
+    def export_motors(self) -> List[MotorEntry]:
+        """설정 저장용 목록 - 등록 순서 (운영 Get_INI_MOTORINFO 와 같은 순서)."""
         with self._lock:
-            return [(m.id, m.mtype, m.use) for m in (self._motors[k] for k in self._order)]
+            return [m.entry() for m in self._motors.values()]
 
-    def add_motor(self, mid: int, mtype: MotorType, use: bool) -> bool:
+    def add_motor(self, mid: int, mtype: MotorType, use: bool, use_limit: bool = False, limit_rpm: int = 0) -> bool:
         key = motor_key(mtype, mid)
         with self._lock:
             if key in self._motors:
                 return False
             status = MotorStatus.READY if use else MotorStatus.NOTUSE
-            self._motors[key] = Motor(id=mid, mtype=MotorType(mtype), use=use, status=status)
+            self._motors[key] = Motor(id=mid, mtype=MotorType(mtype), use=use, use_limit=use_limit,
+                                      limit_rpm=limit_rpm, status=status)
             self._order.append(key)
             self._resort()
             self._touch()
@@ -190,13 +201,14 @@ class HouseLine:
             self._touch()
         return True
 
-    def mod_motor(self, dkey: str, use: bool) -> None:
-        """사용여부 수정. 원본 Mod_Motor"""
+    def mod_motor(self, dkey: str, use: bool, use_limit: bool = False, limit_rpm: int = 0) -> None:
+        """사용여부/속도제한 수정. 운영 Mod_Motor"""
         with self._lock:
             m = self._motors.get(dkey)
             if m is None:
                 return
             if use != m.use:
+                m.check_since = None
                 if use:
                     m.status = MotorStatus.READY
                     m.must_send_zero = False
@@ -205,10 +217,12 @@ class HouseLine:
                     m.rdate = None
                     m.must_send_zero = True   # 사용 중지로 바꾸면 RPM 0 을 한 번 보냄
                 m.use = use
+            m.use_limit = use_limit
+            m.limit_rpm = limit_rpm
             self._touch()
 
     def sort(self, skey: str) -> None:
-        """목록 정렬. 같은 항목을 다시 누르면 오름/내림 전환. 원본 Sort"""
+        """목록 정렬. 같은 항목을 다시 누르면 오름/내림 전환."""
         with self._lock:
             if self._sort_key != skey:
                 self._sort_key = skey
@@ -223,7 +237,7 @@ class HouseLine:
         return self._sort_key, self._sort_desc
 
     def _resort(self) -> None:
-        """원본 Update_BIND_LIST(): 정렬 기준에 따라 표시 순서 재구성 (안정 정렬)."""
+        """운영 Update_BIND_LIST(): 정렬 기준에 따라 표시 순서 재구성 (안정 정렬)."""
         if self._sort_key == "":
             self._sort_key = "MTYPE"
             self._sort_desc = True
@@ -232,9 +246,9 @@ class HouseLine:
         desc = self._sort_desc
         if self._sort_key == "MTYPE":
             if desc:
-                val = lambda k: int(ms[k].mtype) * 100 + 100 - ms[k].id
+                val = lambda k: int(ms[k].mtype) * 1000 + 1000 - ms[k].id
             else:
-                val = lambda k: int(ms[k].mtype) * 100 + ms[k].id
+                val = lambda k: int(ms[k].mtype) * 1000 + ms[k].id
             keys = sorted(keys, key=val, reverse=desc)
         elif self._sort_key == "ID":
             keys = sorted(keys, key=lambda k: ms[k].id, reverse=desc)
@@ -243,30 +257,40 @@ class HouseLine:
         self._order = keys
 
     def update_status(self) -> bool:
-        """모터 상태 갱신(5초 주기). 원본 TMR_STATUS_UPDATER_TICK. 변경이 있으면 True."""
+        """모터 상태 갱신(5초 주기, 제어 중일 때만 호출). 운영 TMR_STATUS_UPDATER_TICK."""
         now = self._clock()
         changed = False
         with self._lock:
             for m in self._motors.values():
+                old = (m.status, m.had_err)
                 if m.use:
                     if m.rdate is None:
-                        new = MotorStatus.READY
-                    elif int(now - m.rdate) >= C.MOTOR_TIMEOUT_SEC:
-                        new = MotorStatus.ERR
+                        m.status = MotorStatus.READY
                     else:
-                        new = MotorStatus.OK
+                        if m.check_since is not None and int(now - m.check_since) >= C.NO_RESPONSE_WARN_SEC:
+                            m.had_err = True
+                            m.check_since = None
+                        m.status = (MotorStatus.ERR if int(now - m.rdate) >= C.MOTOR_TIMEOUT_SEC
+                                    else MotorStatus.OK)
                 else:
-                    new = MotorStatus.NOTUSE
-                if new != m.status:
-                    m.status = new
+                    m.status = MotorStatus.NOTUSE
+                if (m.status, m.had_err) != old:
                     changed = True
             if changed:
                 self._touch()
         return changed
 
+    def _mark_received(self, m: Motor, rpm: Optional[int] = None) -> None:
+        if rpm is not None:
+            m.rpm = rpm
+        m.check_since = None
+        m.rdate = self._clock()
+        m.status = MotorStatus.OK
+        self._touch()
+
     # ------------------------------------------------------------- 서비스
     def service_start(self) -> None:
-        """송수신 시작. 원본 Service_Start"""
+        """구역 제어 시작. 운영 Service_Start (모든 모터의 이상기록/상태 초기화)"""
         self.service_stop(join=True)
         self._debug(0, f"[{self.code}] Start Service!")
         log.info("[%s] 제어 시작", self.code)
@@ -275,6 +299,13 @@ class HouseLine:
         self._src_read_q.clear()
         self._tgt_read_q.clear()
         self._tgt_write_q.clear()
+        with self._lock:
+            for m in self._motors.values():
+                m.had_err = False
+                m.check_since = None
+                m.rdate = None
+                m.status = MotorStatus.READY if m.use else MotorStatus.NOTUSE
+            self._touch()
         self.source.net_status = False
         self.target.net_status = False
         stop = threading.Event()
@@ -284,7 +315,7 @@ class HouseLine:
         self._spawn("tgt_send", self._tgt_send_job, stop)
 
     def service_stop(self, join: bool = False) -> None:
-        """송수신 종료. 원본 Service_Stop"""
+        """구역 제어 종료. 운영 Service_Stop"""
         was_running = not self._stop.is_set()
         self._stop.set()
         self._src_read_q.clear()
@@ -336,15 +367,18 @@ class HouseLine:
         self._tgt_cmd_idx = 0 if i + 1 > C.CMD_IDX_MAX else i + 1
         return i
 
-    def _has_motor(self, dkey: str) -> bool:
-        with self._lock:
-            return dkey in self._motors
-
     def _send_item(self, ch: _Channel, item: _QueueItem, tag: str, stop: threading.Event) -> None:
-        if self._has_motor(item.dkey):
-            ch.send(item.msg)
-            self._debug(item.id, f"[{self.code}][{tag}][{item.id}] {modbus.to_hex(item.msg)}")
-            stop.wait(C.SEND_INTERVAL)
+        with self._lock:
+            m = self._motors.get(item.dkey)
+            if m is None:
+                return
+        ch.send(item.msg)
+        with self._lock:
+            m = self._motors.get(item.dkey)
+            if m is not None and m.check_since is None:
+                m.check_since = self._clock()     # 응답 대기 시작
+        self._debug(item.id, f"[{self.code}][{tag}][{item.id}] {modbus.to_hex(item.msg)}")
+        stop.wait(C.SEND_INTERVAL)
 
     # --- 기존모터 (SOURCE) ---
     def _src_send_job(self, stop: threading.Event) -> None:
@@ -386,9 +420,7 @@ class HouseLine:
         with self._lock:
             m = self._motors.get(motor_key(MotorType.OLD_MOTOR, r.unit_id))
             if m is not None:
-                m.rpm = r.rpm
-                m.rdate = self._clock()
-                self._touch()
+                self._mark_received(m, r.rpm)
 
     # --- 신규모터 (TARGET) ---
     def _flush_writes(self, ch: _Channel, stop: threading.Event) -> bool:
@@ -422,8 +454,9 @@ class HouseLine:
                             if m.mtype != MotorType.NEW_MOTOR:
                                 continue
                             if m.use:
-                                msg = modbus.build_new_read(self._next_tgt_idx(), m.id)
-                                self._tgt_read_q.append(_QueueItem(m.key, m.id, msg))
+                                for build in (modbus.build_new_read_page1, modbus.build_new_read):
+                                    msg = build(self._next_tgt_idx(), m.id)
+                                    self._tgt_read_q.append(_QueueItem(m.key, m.id, msg))
                             elif m.must_send_zero:
                                 # 사용중지된 신규모터는 RPM 0 을 1회 전송
                                 m.must_send_zero = False
@@ -431,7 +464,7 @@ class HouseLine:
                                 self._tgt_write_q.append(_QueueItem(m.key, m.id, msg))
                     if not self._tgt_read_q and self._tgt_write_q:
                         # 사용중인 신규모터가 없어 읽기 명령이 없을 때도 쓰기 명령은 전송
-                        # (원본은 이 경우 RPM 0 명령이 전송되지 않고 쌓이기만 함)
+                        # (운영 프로그램은 이 경우 RPM 0 명령이 쌓이기만 하고 전송되지 않음)
                         self._flush_writes(ch, stop)
                     stop.wait(C.CYCLE_INTERVAL)
             except (OSError, IndexError):
@@ -443,7 +476,7 @@ class HouseLine:
         self._recv_loop(self.target, stop, self._handle_tgt_frame)
 
     def resolve_setting_rpm(self) -> Optional[int]:
-        """신규모터에 적용할 목표 RPM. 참조 모터가 정상이 아니면 None(제어 보류)."""
+        """신규모터 목표 RPM(속도제한 적용 전). 참조 모터가 정상이 아니면 None(제어 보류)."""
         cfg = self.plant.configs[self.code]
         if cfg.source_manual:
             self._debug(0, f"[{self.code}][T]-참조 수동:{cfg.manual_rpm}")
@@ -453,7 +486,7 @@ class HouseLine:
             return None
         sm = src_house.get_motor(motor_key(MotorType.OLD_MOTOR, cfg.source_id))
         if sm is None:
-            # 원본은 참조 모터가 없으면 빈 구조체(상태 0=정상, RPM 0)를 받아 0 으로 제어함.
+            # 운영 프로그램은 참조 모터가 없으면 빈 정보(상태 정상, RPM 0)를 받아 0 으로 제어함.
             # 의도하지 않은 정지를 막기 위해 '상태이상'과 같이 제어를 보류합니다.
             self._debug(0, "참조모터 없음")
             return None
@@ -464,6 +497,13 @@ class HouseLine:
         return None
 
     def _handle_tgt_frame(self, frame: bytes) -> None:
+        p1 = modbus.parse_new_page1(frame)
+        if p1 is not None:
+            with self._lock:
+                m = self._motors.get(motor_key(MotorType.NEW_MOTOR, p1.unit_id))
+                if m is not None:
+                    self._mark_received(m, p1.actual_rpm)
+            return
         r = modbus.parse_new_response(frame)
         if r is None:
             return
@@ -472,21 +512,24 @@ class HouseLine:
             m = self._motors.get(dkey)
             if m is None:
                 return
-            if C.NEW_MOTOR_STATUS_TRACKING:
-                m.rpm = r.rpm
-                m.rdate = self._clock()
-                self._touch()
+            use_limit, limit_rpm = m.use_limit, m.limit_rpm
         setting = self.resolve_setting_rpm()
-        if setting is None:
-            return
-        mid = r.unit_id
-        if r.automanual != 1:
-            self._tgt_write_q.append(_QueueItem(dkey, mid, modbus.build_new_manual_write(self._next_tgt_idx(), mid)))
-        if r.startstop != 1:
-            self._tgt_write_q.append(_QueueItem(dkey, mid, modbus.build_new_run_write(self._next_tgt_idx(), mid)))
-        self._debug(mid, f"[{self.code}][{mid}]-제어RPM:{setting}")
-        if r.rpm != setting:
-            self._tgt_write_q.append(_QueueItem(dkey, mid, modbus.build_new_rpm_write(self._next_tgt_idx(), mid, setting)))
+        if setting is not None:
+            if use_limit and setting > limit_rpm:
+                setting = limit_rpm          # 속도제한: 최대속도 이하로
+            mid = r.unit_id
+            if r.automanual != 1:
+                self._tgt_write_q.append(_QueueItem(dkey, mid, modbus.build_new_manual_write(self._next_tgt_idx(), mid)))
+            if r.startstop != 1:
+                self._tgt_write_q.append(_QueueItem(dkey, mid, modbus.build_new_run_write(self._next_tgt_idx(), mid)))
+            self._debug(mid, f"[{self.code}][{mid}]-제어RPM:{setting}")
+            if r.rpm != setting:
+                self._tgt_write_q.append(
+                    _QueueItem(dkey, mid, modbus.build_new_rpm_write(self._next_tgt_idx(), mid, setting)))
+        with self._lock:
+            m = self._motors.get(dkey)
+            if m is not None:
+                self._mark_received(m)
 
     # --- 공통 수신 ---
     def _recv_loop(self, ch: _Channel, stop: threading.Event, handler) -> None:
