@@ -43,7 +43,8 @@ def test_eight_zones_with_own_buttons(ui, plant):
     assert list(win.zone_panels) == [f"H1R{i}" for i in range(1, 9)]
     zp = win.zone_panels["H1R3"]
     assert zp.StartBtn.text == "3구역 제어 시작" and zp.StopBtn.text == "3구역 제어 종료"
-    assert win.mode_banner is None and "모니터링" not in win.root.title()
+    assert "모니터링" not in win.root.title()
+    assert win.mode_label.cget("text").startswith("제어 모드") and win.BtnMode.cget("text") == "모니터링 모드로 전환"
 
 
 def test_zone_dialog_validation_and_save(ui, plant):
@@ -184,7 +185,7 @@ def test_monitoring_mode_screen(root, tmp_path, monkeypatch):
     monkeypatch.setattr(plant, "start_line", lambda c: plant.houses[c]._stop.clear())
     win = main_window.MainWindow(root, plant)
     assert "모니터링 모드" in root.title()
-    assert win.mode_banner is not None and "제어 신호" in win.mode_banner.cget("text")
+    assert "제어 신호" in win.mode_label.cget("text") and win.BtnMode.cget("text") == "제어 모드로 전환"
     zp = win.zone_panels["H1R2"]
     assert zp.StartBtn.text == "2구역 모니터링 시작" and zp.StopBtn.text == "2구역 모니터링 종료"
     zp.on_start()
@@ -227,3 +228,23 @@ def test_ctrl_motor_add_and_modify(ui, plant):
     d.txtSETRPM.delete(0, "end"); d.txtSETRPM.insert(0, "550")
     d.on_save()
     assert plant.houses["H1R2"].get_motor(key).set_rpm == 550
+
+
+def test_mode_toggle_button(ui, plant):
+    """MAIN-MODE-BTN: 확인 후 모드 전환, 띠 색상/문구, 창 제목, 구역 버튼 문구가 함께 바뀜"""
+    from motor_monitor.ui import theme as T
+    win, _dialogs, _msgs, answers = ui
+    zp = win.zone_panels["H1R4"]
+    assert win.mode_label.cget("bg") == T.CONTROL_BANNER_BG
+    answers["yes"] = False
+    win.BtnMode.invoke()                                  # 아니오 -> 그대로
+    assert not plant.monitoring
+    answers["yes"] = True
+    win.BtnMode.invoke()
+    assert plant.monitoring and win.mode_label.cget("bg") == T.MONITOR_BANNER_BG
+    assert win.mode_banner.cget("bg") == T.MONITOR_BANNER_BG
+    assert win.mode_label.cget("text").startswith("모니터링 모드") and win.BtnMode.cget("text") == "제어 모드로 전환"
+    assert "모니터링 모드" in win.root.title() and zp.StartBtn.text == "4구역 모니터링 시작"
+    win.BtnMode.invoke()
+    assert not plant.monitoring and win.mode_label.cget("bg") == T.CONTROL_BANNER_BG
+    assert win.root.title() == "BLDC MOTOR MONITOR" and zp.StopBtn.text == "4구역 제어 종료"

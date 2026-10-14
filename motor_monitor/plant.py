@@ -18,8 +18,9 @@ log = logging.getLogger(__name__)
 class Plant:
     def __init__(self, config_path: Optional[str] = None, monitoring: bool = False) -> None:
         self.config_path = config_path or cfgmod.default_config_path()
-        # 모니터링 모드: 모터 상태를 읽기만 하고 제어(쓰기) 신호는 보내지 않음. 실행 중에는 바뀌지 않음.
-        # 또한 시작/종료 시 Config.dll 자동 저장을 하지 않음 (사용자가 직접 바꾼 설정만 저장).
+        # 모니터링 모드: 모터 상태를 읽기만 하고 제어(쓰기) 신호는 보내지 않음.
+        # 시작 모드는 --monitoring 옵션으로 정하고, 실행 중에는 화면의 모드 전환 버튼으로 바꿈(set_monitoring).
+        # 모니터링 모드에서는 시작/종료 시 Config.dll 자동 저장을 하지 않음 (사용자가 직접 바꾼 설정만 저장).
         self._monitoring = monitoring
         self.houses: Dict[str, HouseLine] = {}
         self.configs: Dict[str, LineConfig] = {}
@@ -27,6 +28,15 @@ class Plant:
     @property
     def monitoring(self) -> bool:
         return self._monitoring
+
+    def set_monitoring(self, monitoring: bool) -> None:
+        """실행 중 모드 전환. 통신 스레드는 명령마다 이 값을 다시 읽으므로 즉시 반영됨
+        (모니터링 -> 쓰기 즉시 중단, 대기 중인 쓰기 명령도 버림 / 제어 -> 다음 주기부터 쓰기 시작)."""
+        monitoring = bool(monitoring)
+        if monitoring == self._monitoring:
+            return
+        self._monitoring = monitoring
+        log.warning("실행 모드 전환: %s", "모니터링 모드 (제어 신호 전송 안 함)" if monitoring else "제어 모드")
 
     # ------------------------------------------------------------- 설정
     def load(self) -> None:

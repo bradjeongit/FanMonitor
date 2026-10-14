@@ -131,6 +131,10 @@ class ControlButton(tk.Canvas):
     def text(self) -> str:
         return self._text
 
+    def set_text(self, text: str) -> None:
+        self._text = text
+        self._draw()
+
     def _set_hover(self, hover: bool) -> None:
         self._hover = hover
         self._draw()

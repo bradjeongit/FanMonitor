@@ -1,6 +1,6 @@
 """메인 화면 (SCR-MAIN). 기준: 운영 실행파일 MainWindow
 
-구성: (모니터링 모드일 때 맨 위 모드 표시 띠) + 1~8구역을 가로 8열로 배치. 구역 패널마다
+구성: 맨 위 모드 표시 띠(색상·문구 + 모드 전환 버튼) + 1~8구역을 가로 8열로 배치. 구역 패널마다
   제목줄(n구역) / 제어 시작·종료 버튼 / 머리 영역(통신상태 점, IP/PORT, RPM 소스, 설정·추가 버튼) / 모터 목록
 """
 from __future__ import annotations
@@ -40,13 +40,12 @@ class ZonePanel(tk.Frame):
                  font=T.font(9, bold=True)).pack(pady=3)
 
         # 제어 시작/종료 버튼 (같은 자리에서 번갈아 표시)
-        n = zone_number(code)
-        self.action = "모니터링" if app.plant.monitoring else "제어"
         btn_row = tk.Frame(inner, bg=T.WHITE, height=33)
         btn_row.pack(side="top", fill="x")
         btn_row.pack_propagate(False)
-        self.StartBtn = ControlButton(btn_row, f"{n}구역 {self.action} 시작", "start", self.on_start)
-        self.StopBtn = ControlButton(btn_row, f"{n}구역 {self.action} 종료", "stop", self.on_stop)
+        self.StartBtn = ControlButton(btn_row, "", "start", self.on_start)
+        self.StopBtn = ControlButton(btn_row, "", "stop", self.on_stop)
+        self.apply_mode()
         self.show_running(False)
 
         # 머리 영역 (높이 60)
@@ -91,6 +90,16 @@ class ZonePanel(tk.Frame):
         self._version = -1
 
     # --- 제어 버튼 (운영 H1_StartBtn_Click / H1_StopBtn_Click) ---
+    @property
+    def action(self) -> str:
+        return "모니터링" if self.app.plant.monitoring else "제어"
+
+    def apply_mode(self) -> None:
+        """현재 실행 모드에 맞게 버튼 문구 변경 (n구역 제어 시작 <-> n구역 모니터링 시작)"""
+        n = zone_number(self.code)
+        self.StartBtn.set_text(f"{n}구역 {self.action} 시작")
+        self.StopBtn.set_text(f"{n}구역 {self.action} 종료")
+
     def show_running(self, running: bool) -> None:
         if running:
             self.StartBtn.place_forget()
@@ -152,7 +161,6 @@ class MainWindow:
         T.init_fonts(root)
         self.images = T.Images(root)
 
-        root.title(f"{C.APP_TITLE} [모니터링 모드 - 제어 신호 전송 안 함]" if plant.monitoring else C.APP_TITLE)
         root.minsize(1500, 450)          # 운영 MinWidth=1500, MinHeight=450
         root.geometry("1600x900")
         if T.IS_WINDOWS:
@@ -164,13 +172,15 @@ class MainWindow:
         T.set_window_icon(root)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # 모니터링 모드 표시 띠 (MAIN-MODE-BANNER)
-        self.mode_banner = None
-        if plant.monitoring:
-            self.mode_banner = tk.Label(
-                root, text="모니터링 모드  |  모터 상태를 읽기만 하고, 제어 신호(수동·동작·RPM 설정)는 보내지 않습니다.",
-                bg=T.MONITOR_BANNER_BG, fg=T.WHITE, font=T.font(10, bold=True), pady=4)
-            self.mode_banner.pack(side="top", fill="x")
+        # 모드 표시 띠 (MAIN-MODE-BANNER): 모드에 따라 색상·문구가 바뀌고, 오른쪽 버튼으로 모드 전환
+        self.mode_banner = tk.Frame(root)
+        self.mode_banner.pack(side="top", fill="x")
+        self.mode_label = tk.Label(self.mode_banner, fg=T.WHITE, font=T.font(10, bold=True), pady=4, anchor="w")
+        self.mode_label.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        self.BtnMode = tk.Button(self.mode_banner, command=self.on_toggle_mode, font=T.font(9, bold=True),
+                                 bg=T.WHITE, fg=T.MODE_BUTTON_FG, activebackground=T.LIGHT_GRAY,
+                                 relief="flat", bd=0, padx=10, pady=1, cursor="hand2")
+        self.BtnMode.pack(side="right", padx=8, pady=3)
 
         self.content = tk.Frame(root, bg=T.WHITE)
         self.content.pack(fill="both", expand=True, padx=2, pady=2)
@@ -182,6 +192,7 @@ class MainWindow:
             zp.grid(row=0, column=i, sticky="nsew", padx=3, pady=3)
             self.zone_panels[code] = zp
 
+        self.apply_mode()
         self.update_header_box()
         self.refresh_lists(force=True)
         self.update_network_status()
@@ -208,6 +219,44 @@ class MainWindow:
     def refresh_lists(self, force: bool) -> None:
         for zp in self.zone_panels.values():
             zp.refresh(force=force)
+
+    # ------------------------------------------------------------ 실행 모드
+    def apply_mode(self) -> None:
+        """현재 모드에 맞게 띠 색상·문구, 전환 버튼, 창 제목, 구역 버튼 문구 갱신"""
+        if self.plant.monitoring:
+            bg = T.MONITOR_BANNER_BG
+            text = "모니터링 모드  |  모터 상태를 읽기만 하고, 제어 신호(수동·동작·RPM 설정)는 보내지 않습니다."
+            btn = "제어 모드로 전환"
+            self.root.title(f"{C.APP_TITLE} [모니터링 모드 - 제어 신호 전송 안 함]")
+        else:
+            bg = T.CONTROL_BANNER_BG
+            text = "제어 모드  |  모터 상태를 읽고, 제어 신호(수동·동작·RPM 설정)를 보냅니다."
+            btn = "모니터링 모드로 전환"
+            self.root.title(C.APP_TITLE)
+        self.mode_banner.configure(bg=bg)
+        self.mode_label.configure(text=text, bg=bg)
+        self.BtnMode.configure(text=btn)
+        for zp in self.zone_panels.values():
+            zp.apply_mode()
+
+    def on_toggle_mode(self) -> None:
+        """모드 전환 버튼 (MAIN-MODE-BTN). 확인 후 즉시 전환, 실행 중인 구역은 그대로 계속 동작."""
+        running = [get_house_name(c) for c, h in self.plant.houses.items() if h.running]
+        if self.plant.monitoring:
+            msg = "제어 모드로 전환하시겠습니까?\n전환하면 제어 신호(수동·동작·RPM 설정)를 모터로 보냅니다."
+            if running:
+                msg += (f"\n\n실행 중인 구역({', '.join(running)})에 제어 신호가 바로 전송됩니다."
+                        "\n운영 프로그램이 같은 모터를 제어하고 있다면 신호가 겹칠 수 있습니다.")
+            if not messagebox.askyesno("제어 모드로 전환", msg, icon="warning", parent=self.root):
+                return
+            self.plant.set_monitoring(False)
+        else:
+            msg = ("모니터링 모드로 전환하시겠습니까?\n전환하면 제어 신호 전송을 즉시 멈추고, 모터 상태 읽기만 계속합니다."
+                   "\n모터는 마지막으로 받은 설정대로 계속 운전합니다.")
+            if not messagebox.askyesno("모니터링 모드로 전환", msg, parent=self.root):
+                return
+            self.plant.set_monitoring(True)
+        self.apply_mode()
 
     # ------------------------------------------------------------ 표시
     def update_header_box(self) -> None:
