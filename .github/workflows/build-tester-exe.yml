@@ -24,7 +24,7 @@ jobs:
       - name: Test
         run: python -m pytest -q tests/test_tester.py tests/test_core.py
       - name: Build
-        run: pyinstaller --noconfirm ecblue_tester.spec
+        run: python -m PyInstaller --noconfirm ecblue_tester.spec
       - uses: actions/upload-artifact@v4
         with:
           name: ECBLUE_TESTER
