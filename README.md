@@ -13,6 +13,7 @@
 ```
 python run.py              # Python 3.9+ (표준 라이브러리만 사용)
 python run.py --debug      # 통신 패킷 로그 포함
+python run.py --monitoring # 모니터링 모드: 읽기만, 제어 신호 전송 안 함 (run_monitoring.bat)
 build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
 ```
 설정은 실행 폴더의 `Config.dll`(운영 프로그램과 같은 암호화 파일), 로그는 `logs/` 에 저장됩니다.

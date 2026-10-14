@@ -3,6 +3,7 @@
 사용법(리눅스, Xvfb/ImageMagick 필요):
   xvfb-run -a -s "-screen 0 1920x1080x24" python tools/make_screenshots.py docs/images
   python tools/annotate_screenshots.py docs/images
+  MONITORING=1 xvfb-run ... python tools/make_screenshots.py docs/images   # 모니터링 모드 화면(main_monitoring.png)만
 """
 import json
 import os
@@ -44,7 +45,8 @@ REF = {"H1R1": ("H1R1", 2), "H1R2": ("H1R2", 66), "H1R3": ("H1R1", 2), "H1R4": (
 LIMITS = {("H1R3", 13): 500, ("H1R4", 12): 450, ("H1R5", 4): 400, ("H1R7", 11): 400}
 
 old_gw, new_gw = {}, {}
-plant = Plant(cfg_path)
+MONITORING = os.environ.get("MONITORING") == "1"
+plant = Plant(cfg_path, monitoring=MONITORING)
 plant.load()
 for code, (olds, news) in ZONES.items():
     og, ng = FakeGateway().start(), FakeGateway().start()
@@ -118,6 +120,10 @@ def demo_states():
 
 
 def main_shot():
+    if MONITORING:
+        snap("main_monitoring")
+        root.after(100, finish)
+        return
     snap("main_running")
     zp = win.zone_panels["H1R1"]
     items = [("1", zp.StopBtn), ("2", zp), ("3", zp.rec_SOURCE_NETSTATUS.master),
@@ -184,7 +190,8 @@ def motor_mod():
 
 
 def finish():
-    json.dump(MARKS, open(os.path.join(SCR, "marks.json"), "w"))
+    if not MONITORING:
+        json.dump(MARKS, open(os.path.join(SCR, "marks.json"), "w"))
     plant.shutdown()
     for g in list(old_gw.values()) + list(new_gw.values()):
         g.stop()

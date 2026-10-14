@@ -18,11 +18,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="BLDC MOTOR MONITOR")
     ap.add_argument("--config", help="설정 파일 경로 (기본: 실행 폴더의 Config.dll)")
     ap.add_argument("--debug", action="store_true", help="통신 상세 로그 출력")
+    ap.add_argument("--monitoring", action="store_true",
+                    help="모니터링 모드: 읽기만 하고 제어 신호는 보내지 않음 (운영 프로그램과 함께 시험할 때)")
     args = ap.parse_args(argv)
 
     setup_logging(os.path.join(app_base_dir(), "logs"), logging.DEBUG if args.debug else logging.INFO)
     log = logging.getLogger("motor_monitor")
-    log.info("BLDC MOTOR MONITOR v%s 시작", __version__)
+    log.info("BLDC MOTOR MONITOR v%s 시작 (%s)", __version__,
+             "모니터링 모드 - 제어 신호 전송 안 함" if args.monitoring else "제어 모드")
 
     root = tk.Tk()
     root.withdraw()
@@ -34,7 +37,7 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        plant = Plant(args.config)
+        plant = Plant(args.config, monitoring=args.monitoring)
         try:
             plant.load()
         except ConfigError as e:

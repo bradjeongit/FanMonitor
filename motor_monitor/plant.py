@@ -16,10 +16,17 @@ log = logging.getLogger(__name__)
 
 
 class Plant:
-    def __init__(self, config_path: Optional[str] = None) -> None:
+    def __init__(self, config_path: Optional[str] = None, monitoring: bool = False) -> None:
         self.config_path = config_path or cfgmod.default_config_path()
+        # 모니터링 모드: 모터 상태를 읽기만 하고 제어(쓰기) 신호는 보내지 않음. 실행 중에는 바뀌지 않음.
+        # 또한 시작/종료 시 Config.dll 자동 저장을 하지 않음 (사용자가 직접 바꾼 설정만 저장).
+        self._monitoring = monitoring
         self.houses: Dict[str, HouseLine] = {}
         self.configs: Dict[str, LineConfig] = {}
+
+    @property
+    def monitoring(self) -> bool:
+        return self._monitoring
 
     # ------------------------------------------------------------- 설정
     def load(self) -> None:
@@ -33,7 +40,8 @@ class Plant:
             for e in motors.get(s, []):
                 h.add_motor(e.id, e.mtype, e.use, e.use_limit, e.limit_rpm)
             self.houses[s] = h
-        self.save()
+        if not self.monitoring:
+            self.save()
 
     def save(self) -> None:
         """운영 Put_Local_Config"""
@@ -83,9 +91,10 @@ class Plant:
                 h.update_status()
 
     def shutdown(self) -> None:
-        """프로그램 종료: 설정 저장 후 모든 구역 제어 종료."""
+        """프로그램 종료: 설정 저장(모니터링 모드 제외) 후 모든 구역 제어 종료."""
         try:
-            self.save()
+            if not self.monitoring:
+                self.save()
         finally:
             for h in self.houses.values():
                 h.service_stop()

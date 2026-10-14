@@ -298,3 +298,43 @@ def test_reference_not_ok_holds_control(tmp_path, fast):
         h.service_stop(join=True)
     finally:
         gw_new.stop()
+
+
+# ---------------------------------------------------------------- 모니터링 모드 (읽기 전용)
+def test_monitoring_mode_never_writes(tmp_path, fast):
+    gw_old = FakeGateway().start()
+    gw_new = FakeGateway().start()
+    gw_old.add_old(2, 770)
+    gw_new.add_new(1, automanual=0, startstop=0, rpm=100)        # 제어 모드라면 수동·동작·RPM 쓰기 3건이 나갈 상태
+    gw_new.add_new(3, automanual=1, startstop=1, rpm=900)        # 속도제한 모터 (제어 모드라면 500 으로 씀)
+    try:
+        path = tmp_path / "Config.dll"
+        Plant(str(path)).load()                                  # 설정 파일 준비 (제어 모드)
+        before = path.read_bytes()
+        plant = Plant(str(path), monitoring=True)
+        plant.load()
+        code = "H1R1"
+        h = plant.houses[code]
+        h.add_motor(2, MotorType.OLD_MOTOR, True)
+        h.add_motor(1, MotorType.NEW_MOTOR, True)
+        h.add_motor(3, MotorType.NEW_MOTOR, True, True, 500)
+        plant.configs[code] = plant.configs[code].copy(
+            source_ip=gw_old.host, source_port=gw_old.port, target_ip=gw_new.host, target_port=gw_new.port,
+            source_manual=False, source_line=code, source_id=2)
+        plant.start_line(code)
+        # 읽기는 정상 동작
+        assert _wait(lambda: h.get_motor("0_2").rpm == 770)
+        assert _wait(lambda: h.get_motor("1_3").status == MotorStatus.OK and h.get_motor("1_1").status == MotorStatus.OK)
+        assert _wait(lambda: sum(1 for r in gw_new.requests if r[7] == modbus.FC_READ_HOLDING) >= 8)
+        h.mod_motor("1_3", False)                                 # 제어 모드라면 RPM 0 쓰기
+        time.sleep(0.5)
+        # 쓰기(FC06) 요청은 단 한 건도 없어야 함
+        assert gw_new.writes == []
+        assert all(r[7] != modbus.FC_WRITE_SINGLE for r in gw_new.requests + gw_old.requests)
+        assert list(h._tgt_write_q) == []
+        plant.shutdown()
+        h.service_stop(join=True)
+        assert path.read_bytes() == before                        # 시작/종료 시 설정 파일 자동 저장 안 함
+    finally:
+        gw_old.stop()
+        gw_new.stop()

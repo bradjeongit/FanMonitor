@@ -5,6 +5,7 @@
 - 신규모터: 1페이지(현재 RPM)와 2페이지(수동/동작/RPM설정)를 읽고, 2페이지 값이 목표와 다르면 써넣음
   목표 RPM = 수동RPM 또는 참조 기존모터 RPM, 속도제한 사용 시 최대속도 이하로 제한
 - 상태: 응답 수신 = 정상, 명령 후 60초 무응답 = '이상기록', 마지막 응답 후 1시간 = 이상
+- 모니터링 모드(plant.monitoring): 읽기만 하고 신규모터 쓰기(제어) 명령은 만들지도 보내지도 않음
 """
 from __future__ import annotations
 
@@ -293,7 +294,7 @@ class HouseLine:
         """구역 제어 시작. 운영 Service_Start (모든 모터의 이상기록/상태 초기화)"""
         self.service_stop(join=True)
         self._debug(0, f"[{self.code}] Start Service!")
-        log.info("[%s] 제어 시작", self.code)
+        log.info("[%s] %s 시작", self.code, "모니터링(읽기 전용)" if self.monitoring else "제어")
         self._src_cmd_idx = 0
         self._tgt_cmd_idx = 0
         self._src_read_q.clear()
@@ -423,7 +424,21 @@ class HouseLine:
                 self._mark_received(m, r.rpm)
 
     # --- 신규모터 (TARGET) ---
+    @property
+    def monitoring(self) -> bool:
+        return bool(getattr(self.plant, "monitoring", False))
+
+    def _enqueue_write(self, item: _QueueItem) -> None:
+        """쓰기(제어) 명령 적재. 모니터링 모드에서는 적재하지 않음 (쓰기 차단의 단일 관문)."""
+        if self.monitoring:
+            self._debug(item.id, f"[{self.code}][모니터링] 쓰기 생략 {modbus.to_hex(item.msg)}")
+            return
+        self._tgt_write_q.append(item)
+
     def _flush_writes(self, ch: _Channel, stop: threading.Event) -> bool:
+        if self.monitoring:
+            self._tgt_write_q.clear()      # 이중 안전장치: 모니터링 모드에서는 어떤 쓰기도 전송하지 않음
+            return True
         for _ in range(len(self._tgt_write_q)):
             if stop.is_set():
                 return False
@@ -460,8 +475,9 @@ class HouseLine:
                             elif m.must_send_zero:
                                 # 사용중지된 신규모터는 RPM 0 을 1회 전송
                                 m.must_send_zero = False
-                                msg = modbus.build_new_rpm_write(self._next_tgt_idx(), m.id, 0)
-                                self._tgt_write_q.append(_QueueItem(m.key, m.id, msg))
+                                if not self.monitoring:
+                                    msg = modbus.build_new_rpm_write(self._next_tgt_idx(), m.id, 0)
+                                    self._enqueue_write(_QueueItem(m.key, m.id, msg))
                     if not self._tgt_read_q and self._tgt_write_q:
                         # 사용중인 신규모터가 없어 읽기 명령이 없을 때도 쓰기 명령은 전송
                         # (운영 프로그램은 이 경우 RPM 0 명령이 쌓이기만 하고 전송되지 않음)
@@ -513,18 +529,18 @@ class HouseLine:
             if m is None:
                 return
             use_limit, limit_rpm = m.use_limit, m.limit_rpm
-        setting = self.resolve_setting_rpm()
+        setting = None if self.monitoring else self.resolve_setting_rpm()
         if setting is not None:
             if use_limit and setting > limit_rpm:
                 setting = limit_rpm          # 속도제한: 최대속도 이하로
             mid = r.unit_id
             if r.automanual != 1:
-                self._tgt_write_q.append(_QueueItem(dkey, mid, modbus.build_new_manual_write(self._next_tgt_idx(), mid)))
+                self._enqueue_write(_QueueItem(dkey, mid, modbus.build_new_manual_write(self._next_tgt_idx(), mid)))
             if r.startstop != 1:
-                self._tgt_write_q.append(_QueueItem(dkey, mid, modbus.build_new_run_write(self._next_tgt_idx(), mid)))
+                self._enqueue_write(_QueueItem(dkey, mid, modbus.build_new_run_write(self._next_tgt_idx(), mid)))
             self._debug(mid, f"[{self.code}][{mid}]-제어RPM:{setting}")
             if r.rpm != setting:
-                self._tgt_write_q.append(
+                self._enqueue_write(
                     _QueueItem(dkey, mid, modbus.build_new_rpm_write(self._next_tgt_idx(), mid, setting)))
         with self._lock:
             m = self._motors.get(dkey)

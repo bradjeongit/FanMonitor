@@ -43,6 +43,7 @@ def test_eight_zones_with_own_buttons(ui, plant):
     assert list(win.zone_panels) == [f"H1R{i}" for i in range(1, 9)]
     zp = win.zone_panels["H1R3"]
     assert zp.StartBtn.text == "3구역 제어 시작" and zp.StopBtn.text == "3구역 제어 종료"
+    assert win.mode_banner is None and "모니터링" not in win.root.title()
 
 
 def test_zone_dialog_validation_and_save(ui, plant):
@@ -172,3 +173,19 @@ def test_zone_start_stop_and_status_icons(ui, plant, monkeypatch):
     assert MotorListView.status_icon(m) == ("bad_new", "이상")
     m.status = MotorStatus.READY
     assert MotorListView.status_icon(m) == (None, "")
+
+
+def test_monitoring_mode_screen(root, tmp_path, monkeypatch):
+    from motor_monitor.ui import main_window
+    asked = []
+    monkeypatch.setattr(main_window.messagebox, "askyesno", lambda t, m, **k: (asked.append((t, m)), True)[1])
+    plant = Plant(str(tmp_path / "Config.dll"), monitoring=True)
+    plant.load()
+    monkeypatch.setattr(plant, "start_line", lambda c: plant.houses[c]._stop.clear())
+    win = main_window.MainWindow(root, plant)
+    assert "모니터링 모드" in root.title()
+    assert win.mode_banner is not None and "제어 신호" in win.mode_banner.cget("text")
+    zp = win.zone_panels["H1R2"]
+    assert zp.StartBtn.text == "2구역 모니터링 시작" and zp.StopBtn.text == "2구역 모니터링 종료"
+    zp.on_start()
+    assert asked[-1] == ("모니터링", "2구역 모니터링을 시작하시겠습니까?")

@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 문서 버전 | 2.0.0 (프로그램 버전과 동일) |
+| 문서 버전 | 2.1.0 (프로그램 버전과 동일) |
 | 대상 프로그램 | `motor_monitor` 패키지 (실행: `run.py`) |
 | 기준 | **현재 운영 중인 실행파일 `BLDC_MOTOR_MONITOR.exe`** (VB.NET WPF)를 복원·분석한 동작 |
 | 설정 파일 | `Config.dll` — 운영 프로그램과 같은 파일을 그대로 사용 (7장) |
@@ -21,6 +21,7 @@
 | 접두어 | 의미 | 예 |
 |---|---|---|
 | `SCR-` | 화면(메인 창) | `SCR-MAIN` |
+| `MAIN-` | 메인 화면 공통 요소 | `MAIN-MODE-BANNER` |
 | `DLG-` | 대화상자(팝업 창) | `DLG-LINE`, `DLG-MOTOR` |
 | `ZONE-` | 구역 패널 (n = 1~8) | `ZONE-3` (3구역) |
 | `MSG-` | 메시지 창(확인/오류 알림) | `MSG-LINE-02` |
@@ -44,7 +45,7 @@
 
 | ID | 이름 | 여는 방법 | 크기 | 코드 (파일 / 클래스) | 운영 프로그램 |
 |---|---|---|---|---|---|
-| `SCR-MAIN` | 메인 화면 (1~8구역 가로 배치) | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1500×450 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow` |
+| `SCR-MAIN` | 메인 화면 (1~8구역 가로 배치). 실행 모드: **제어 모드**(기본) / **모니터링 모드**(4.4절) | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1500×450 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow` |
 | `DLG-LINE` | 구역설정 창 | `ZONE-*-BTN-SET` 클릭 | 400×300 고정, 모달 | `motor_monitor/ui/dialogs.py` / `LineSettingsDialog` | `wHOUSE` |
 | `DLG-MOTOR` (ADD) | 모터 추가 창 | `ZONE-*-BTN-ADD` 클릭 | 400×300 고정, 모달 | `dialogs.py` / `MotorDialog(mode="ADD")` | `wMotor` |
 | `DLG-MOTOR` (MOD) | 모터 수정/삭제 창 | `ZONE-*-LIST` 항목 더블클릭 | 400×300 고정, 모달 | `dialogs.py` / `MotorDialog(mode="MOD")` | `wMotor` |
@@ -56,11 +57,13 @@
 ### 3.1 `SCR-MAIN` 메인 화면
 
 1~8구역이 가로 8열로 같은 폭으로 나뉩니다. 각 구역은 독립적으로 제어를 시작/종료합니다.
+모니터링 모드에서는 맨 위에 `MAIN-MODE-BANNER` 가 표시되고 버튼 문구의 '제어' 가 '모니터링' 으로 바뀝니다(4.4절).
 
 ![메인 화면 구성요소 번호](images/main_running_annotated.png)
 
 | 번호 | ID | 이름 | 종류 | 코드 객체 | 표시 / 동작 |
 |---|---|---|---|---|---|
+| – | `MAIN-MODE-BANNER` | 모니터링 모드 표시 띠 | 글자 띠 | `MainWindow.mode_banner` | 모니터링 모드일 때만 맨 위에 표시. 주황(`C-MODE-BANNER`) 바탕 흰 굵은 글씨 "모니터링 모드 \| 모터 상태를 읽기만 하고, 제어 신호(수동·동작·RPM 설정)는 보내지 않습니다." 창 제목에도 `[모니터링 모드 - 제어 신호 전송 안 함]` 추가 |
 | 1 | `ZONE-*-BTN-START` | n구역 제어 시작 버튼 | 버튼 | `ZonePanel.StartBtn` | 확인(`MSG-MAIN-02`) 후 이 구역만 통신·제어 시작 → `BTN-STOP` 으로 바뀜. 구역 폭 전체, 높이 29 |
 | 1 | `ZONE-*-BTN-STOP` | n구역 제어 종료 버튼 | 버튼 | `ZonePanel.StopBtn` | 확인(`MSG-MAIN-03`) 후 이 구역 통신·제어 중지 → 시작 버튼으로 바뀜 |
 | 2 | `ZONE-{n}` | 구역 패널 | 묶음 | `ZonePanel` (`MainWindow.zone_panels["H1R{n}"]`) | 위에서부터 제목줄, 제어 버튼, 머리 영역, 모터 목록 |
@@ -181,6 +184,8 @@
 | `MSG-MAIN-04` | 종료 | 종료하시겠습니까? 종료시 제어기능이 동작하지 않습니다. | 예/아니오 | 메인 창 닫기(X) |
 | `MSG-MAIN-05` | 오류 | 설정 저장에 실패했습니다. (+오류내용) | 확인 | 종료 시 저장 실패 (신규) |
 | `MSG-MAIN-06` | 오류 | 프로그램 설정 정보가 처리중 오류가 발생했습니다. 제작사에 문의바랍니다. | 확인 | 시작 시 `Config.dll` 해독 실패 (후 종료, 파일은 그대로 둠) |
+| `MSG-MAIN-07` | 모니터링 | n구역 모니터링을 시작하시겠습니까? / n구역 모니터링을 종료하시겠습니까? | 예/아니오 | 모니터링 모드의 `ZONE-*-BTN-START` / `-STOP` |
+| `MSG-MAIN-08` | 종료 | 종료하시겠습니까? | 예/아니오 | 모니터링 모드에서 메인 창 닫기(X) |
 | `MSG-LINE-01` | 에러 | 기존모터 접속 IP를 입력해 주세요. | 확인 | `DLG-LINE` 저장 |
 | `MSG-LINE-02` | 에러 | 기존모터 접속 IP가 올바른 형식이 아닙니다.. | 확인 | 〃 |
 | `MSG-LINE-03` | 에러 | 기존모터 접속 PORT를 입력해 주세요. | 확인 | 〃 |
@@ -250,6 +255,24 @@
                                  자동/수동 ≠ 1 → 수동(1) 쓰기, 동작/정지 ≠ 1 → 동작(1) 쓰기, RPM ≠ 목표 → RPM 쓰기
 ```
 
+### 4.4 모니터링 모드 (읽기 전용)
+
+운영 프로그램이 같은 모터를 제어하는 중에 이 프로그램을 시험할 때, 제어 신호가 겹치지 않도록 **읽기만** 하는 실행 모드입니다.
+
+| 항목 | 제어 모드 (기본) | 모니터링 모드 |
+|---|---|---|
+| 켜는 방법 | `python run.py` / `BLDC_MOTOR_MONITOR.exe` | `python run.py --monitoring` / `BLDC_MOTOR_MONITOR.exe --monitoring` / `run_monitoring.bat` |
+| 실행 중 모드 전환 | – | **불가** (실수로 제어가 시작되는 것을 막기 위해 실행할 때만 결정) |
+| 기존모터 RPM 읽기 (FC04) | 함 | 함 |
+| 신규모터 1·2페이지 읽기 (FC03) | 함 | 함 (현재 RPM, 상태 표시) |
+| 신규모터 쓰기 (FC06: 수동 0x13, 동작 0x14, RPM 0x16, 중지 시 RPM 0) | 함 | **하지 않음** — 명령을 만들지도 보내지도 않음 |
+| 상태 판정, 상태 점, 목록 표시 | 같음 | 같음 (`DOT-REF` 는 "제어 모드였다면 제어 가능한지" 를 표시) |
+| 시작/종료 시 `Config.dll` 자동 저장 | 함 | **하지 않음** (구역설정·모터 추가/수정/삭제처럼 직접 바꾼 내용만 저장) |
+| 화면 | – | `MAIN-MODE-BANNER`, 창 제목 표시, 버튼 "n구역 모니터링 시작/종료" |
+
+- 구현: 모든 쓰기 명령은 `HouseLine._enqueue_write` 한 곳을 거치며, 모니터링 모드면 버려집니다. 전송 단계(`_flush_writes`)에서도 한 번 더 막습니다(이중 차단). 자동 시험 `test_monitoring_mode_never_writes` 가 쓰기 요청 0건을 확인합니다.
+- 주의: 읽기 요청은 보내므로, 운영 프로그램과 동시에 쓰면 통신장치에 연결이 하나 더 생깁니다. 통신장치의 동시 접속 허용 수를 확인하세요.
+
 ---
 
 ## 5. 동작 파라미터 (`motor_monitor/constants.py`)
@@ -279,6 +302,7 @@
 | ID | 상수 | 값 | 사용처 |
 |---|---|---|---|
 | `C-ZONE-TITLE` | `ZONE_TITLE_BG` | `#34495e` | 구역 제목줄 |
+| `C-MODE-BANNER` | `MONITOR_BANNER_BG` | `#d35400` | 모니터링 모드 표시 띠 |
 | `C-NET-OK` / `C-NET-ERR` / `C-NET-STOP` | `NET_OK` / `NET_ERR` / `NET_STOP` | `#2980b9` / `#c0392b` / `#808080` | 상태 점 |
 | `C-BTN-START` / `C-BTN-STOP` | `START_ICON` / `STOP_ICON` | `#2980b9` / `#c0392b` | 제어 버튼 아이콘·마우스오버 |
 | `C-DLG-LINE` / `C-DLG-MOTOR` | `LINE_DIALOG_HEADER` / `MOTOR_DIALOG_HEADER` | `#2c3e50` / `#16a085` | 대화상자 제목줄 |
@@ -364,7 +388,8 @@ H1R1_MOTORS=2=0=1=0=0,4=0=1=0=0,1=1=1=0=0
 | 파일 | 역할 | 운영 프로그램 |
 |---|---|---|
 | `run.py` | 실행 시작점 | – |
-| `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창) | `Application`, `MainWindow_Loaded` |
+| `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창), `--monitoring` 옵션 | `Application`, `MainWindow_Loaded` |
+| `run_monitoring.bat` | 모니터링 모드로 실행 (exe 가 있으면 exe, 없으면 python) | – |
 | `motor_monitor/constants.py` | 상수(5장) | `M_Variables` |
 | `motor_monitor/crypto3des.py` | Config.dll 암호화/복호화 | `C_3DES` |
 | `motor_monitor/config.py` | Config.dll 읽기/쓰기 | `M_Config` |
@@ -378,7 +403,7 @@ H1R1_MOTORS=2=0=1=0=0,4=0=1=0=0,1=1=1=0=0
 | `motor_monitor/ui/dialogs.py` | `DLG-LINE`, `DLG-MOTOR` | `wHOUSE`, `wMotor` |
 | `motor_monitor/ui/widgets.py` | 버튼, 상태 점, 툴팁, 모터 목록 | XAML 템플릿 |
 | `motor_monitor/ui/theme.py` | 색상·글꼴·그림 | XAML 색상값 |
-| `tests/` | 자동 시험 (로직 26개 + 화면 6개) | – |
+| `tests/` | 자동 시험 (로직 27개 + 화면 7개) | – |
 | `tools/` | 문서용 화면 캡처/번호 표시 | – |
 
 ---
@@ -398,4 +423,5 @@ H1R1_MOTORS=2=0=1=0=0,4=0=1=0=0,1=1=1=0=0
 |---|---|---|---|
 | 1.0.0 | 2026-10-13 | 구버전 VB.NET 소스를 파이썬으로 이식 (온실 탭, 짝/홀 16라인, Config.ini) | 전체 |
 | 1.1.0 | 2026-10-13 | 한 화면 1~8구역(짝/홀 유지), 신규모터 상태 표시 | – |
+| 2.1.0 | 2026-10-14 | **모니터링 모드 추가**: `--monitoring` / `run_monitoring.bat` 로 실행하면 읽기만 하고 신규모터 쓰기(제어) 명령을 보내지 않음, 시작/종료 시 설정 자동 저장 안 함, 화면 표시 띠·창 제목·버튼 문구 변경 | `MAIN-MODE-BANNER`, `ZONE-*-BTN-START/STOP`, `MSG-MAIN-07/08`, `C-MODE-BANNER`, 4.4절 |
 | 2.0.0 | 2026-10-14 | **운영 실행파일 기준으로 재작성.** 8개 구역(구역당 1라인) 가로 배치·구역별 제어 버튼, `Config.dll` 3DES 암호화 설정 호환, 신규모터 1페이지(현재 RPM 0x05) 읽기, 속도제한(제한모드) 기능, 이상기록(60초)·이상(1시간) 판정, 모터 ID 1~250, 명령 간격 0.3초, 상태 그림 4종. 운영 프로그램 오류 수정(D1~D3) | 전체 (ID 체계 `LINE-` → `ZONE-` 변경) |

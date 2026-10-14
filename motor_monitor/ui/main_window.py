@@ -1,6 +1,6 @@
 """메인 화면 (SCR-MAIN). 기준: 운영 실행파일 MainWindow
 
-구성: 1~8구역을 가로 8열로 배치. 구역 패널마다
+구성: (모니터링 모드일 때 맨 위 모드 표시 띠) + 1~8구역을 가로 8열로 배치. 구역 패널마다
   제목줄(n구역) / 제어 시작·종료 버튼 / 머리 영역(통신상태 점, IP/PORT, RPM 소스, 설정·추가 버튼) / 모터 목록
 """
 from __future__ import annotations
@@ -41,11 +41,12 @@ class ZonePanel(tk.Frame):
 
         # 제어 시작/종료 버튼 (같은 자리에서 번갈아 표시)
         n = zone_number(code)
+        self.action = "모니터링" if app.plant.monitoring else "제어"
         btn_row = tk.Frame(inner, bg=T.WHITE, height=33)
         btn_row.pack(side="top", fill="x")
         btn_row.pack_propagate(False)
-        self.StartBtn = ControlButton(btn_row, f"{n}구역 제어 시작", "start", self.on_start)
-        self.StopBtn = ControlButton(btn_row, f"{n}구역 제어 종료", "stop", self.on_stop)
+        self.StartBtn = ControlButton(btn_row, f"{n}구역 {self.action} 시작", "start", self.on_start)
+        self.StopBtn = ControlButton(btn_row, f"{n}구역 {self.action} 종료", "stop", self.on_stop)
         self.show_running(False)
 
         # 머리 영역 (높이 60)
@@ -100,14 +101,16 @@ class ZonePanel(tk.Frame):
 
     def on_start(self) -> None:
         name = get_house_name(self.code)
-        if messagebox.askyesno("제어", f"{name} 제어를 시작하시겠습니까?", parent=self.app.root):
+        if messagebox.askyesno(self.action, f"{name} {self.action}을 시작하시겠습니까?" if self.action == "모니터링"
+                               else f"{name} 제어를 시작하시겠습니까?", parent=self.app.root):
             self.app.plant.start_line(self.code)
             self.show_running(True)
             self.app.update_network_status()
 
     def on_stop(self) -> None:
         name = get_house_name(self.code)
-        if messagebox.askyesno("제어", f"{name} 제어를 종료하시겠습니까?", parent=self.app.root):
+        if messagebox.askyesno(self.action, f"{name} {self.action}을 종료하시겠습니까?" if self.action == "모니터링"
+                               else f"{name} 제어를 종료하시겠습니까?", parent=self.app.root):
             self.app.plant.stop_line(self.code)
             self.show_running(False)
             self.app.update_network_status()
@@ -149,7 +152,7 @@ class MainWindow:
         T.init_fonts(root)
         self.images = T.Images(root)
 
-        root.title(C.APP_TITLE)
+        root.title(f"{C.APP_TITLE} [모니터링 모드 - 제어 신호 전송 안 함]" if plant.monitoring else C.APP_TITLE)
         root.minsize(1500, 450)          # 운영 MinWidth=1500, MinHeight=450
         root.geometry("1600x900")
         if T.IS_WINDOWS:
@@ -160,6 +163,14 @@ class MainWindow:
         root.configure(bg=T.WHITE)
         T.set_window_icon(root)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        # 모니터링 모드 표시 띠 (MAIN-MODE-BANNER)
+        self.mode_banner = None
+        if plant.monitoring:
+            self.mode_banner = tk.Label(
+                root, text="모니터링 모드  |  모터 상태를 읽기만 하고, 제어 신호(수동·동작·RPM 설정)는 보내지 않습니다.",
+                bg=T.MONITOR_BANNER_BG, fg=T.WHITE, font=T.font(10, bold=True), pady=4)
+            self.mode_banner.pack(side="top", fill="x")
 
         self.content = tk.Frame(root, bg=T.WHITE)
         self.content.pack(fill="both", expand=True, padx=2, pady=2)
@@ -225,7 +236,9 @@ class MainWindow:
     # ------------------------------------------------------------ 종료
     def on_close(self) -> None:
         """창 닫기 (운영 MainWindow_Closing)"""
-        if messagebox.askyesno("종료", "종료하시겠습니까? 종료시 제어기능이 동작하지 않습니다.", parent=self.root):
+        msg = ("종료하시겠습니까?" if self.plant.monitoring
+               else "종료하시겠습니까? 종료시 제어기능이 동작하지 않습니다.")
+        if messagebox.askyesno("종료", msg, parent=self.root):
             try:
                 self.plant.shutdown()
             except OSError as e:
