@@ -390,6 +390,7 @@ H1R1_MOTORS=2=0=1=0=0,4=0=1=0=0,1=1=1=0=0
 | `run.py` | 실행 시작점 | – |
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창), `--monitoring` 옵션 | `Application`, `MainWindow_Loaded` |
 | `run_monitoring.bat` | 모니터링 모드로 실행 (exe 가 있으면 exe, 없으면 python) | – |
+| `update.bat` | 로컬 폴더를 GitHub `main` 최신 내용으로 업데이트 (`git pull --ff-only`, Config.dll·logs 유지) | – |
 | `motor_monitor/constants.py` | 상수(5장) | `M_Variables` |
 | `motor_monitor/crypto3des.py` | Config.dll 암호화/복호화 | `C_3DES` |
 | `motor_monitor/config.py` | Config.dll 읽기/쓰기 | `M_Config` |
@@ -423,5 +424,6 @@ H1R1_MOTORS=2=0=1=0=0,4=0=1=0=0,1=1=1=0=0
 |---|---|---|---|
 | 1.0.0 | 2026-10-13 | 구버전 VB.NET 소스를 파이썬으로 이식 (온실 탭, 짝/홀 16라인, Config.ini) | 전체 |
 | 1.1.0 | 2026-10-13 | 한 화면 1~8구역(짝/홀 유지), 신규모터 상태 표시 | – |
+| 2.1.0 | 2026-10-14 | `update.bat` 추가 (로컬 폴더 최신화 도구, 프로그램 동작 변경 없음) | – |
 | 2.1.0 | 2026-10-14 | **모니터링 모드 추가**: `--monitoring` / `run_monitoring.bat` 로 실행하면 읽기만 하고 신규모터 쓰기(제어) 명령을 보내지 않음, 시작/종료 시 설정 자동 저장 안 함, 화면 표시 띠·창 제목·버튼 문구 변경 | `MAIN-MODE-BANNER`, `ZONE-*-BTN-START/STOP`, `MSG-MAIN-07/08`, `C-MODE-BANNER`, 4.4절 |
 | 2.0.0 | 2026-10-14 | **운영 실행파일 기준으로 재작성.** 8개 구역(구역당 1라인) 가로 배치·구역별 제어 버튼, `Config.dll` 3DES 암호화 설정 호환, 신규모터 1페이지(현재 RPM 0x05) 읽기, 속도제한(제한모드) 기능, 이상기록(60초)·이상(1시간) 판정, 모터 ID 1~250, 명령 간격 0.3초, 상태 그림 4종. 운영 프로그램 오류 수정(D1~D3) | 전체 (ID 체계 `LINE-` → `ZONE-` 변경) |
