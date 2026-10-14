@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 SEC_LINE = "LINE_CONFIG"
 SEC_MOTOR = "MOTOR_CONFIG"
+SEC_CTRL = "CTRL_MOTOR_CONFIG"   # 기존모터제어 목록 (이 프로그램 전용 섹션, 운영 프로그램은 무시)
 
 
 class ConfigError(Exception):
@@ -48,6 +49,9 @@ class MotorEntry(NamedTuple):
     use: bool
     use_limit: bool = False     # 속도제한 사용 (신규모터)
     limit_rpm: int = 0          # 속도제한 최대 RPM
+    ip: str = ""                # 기존모터제어: 접속 IP
+    port: int = 0               # 기존모터제어: 접속 PORT
+    set_rpm: int = 0            # 기존모터제어: 지정 운전 속도 (RPM)
 
 
 def app_base_dir() -> str:
@@ -102,6 +106,8 @@ def parse_motor_list(data: str) -> List[MotorEntry]:
             continue
         try:
             mtype = MotorType(_to_int(parts[1]))
+            if mtype == MotorType.OLD_CTRL:      # 기존모터제어는 별도 섹션에만 기록됨
+                raise ValueError
         except ValueError:
             log.warning("알 수 없는 모터 종류(무시): %r", item)
             continue
@@ -114,8 +120,30 @@ def parse_motor_list(data: str) -> List[MotorEntry]:
 
 
 def format_motor_list(motors: List[MotorEntry]) -> str:
+    """[MOTOR_CONFIG] 형식 (운영 프로그램과 같음). 기존모터제어는 제외."""
     return ",".join(
-        f"{m.id}={int(m.mtype)}={1 if m.use else 0}={1 if m.use_limit else 0}={m.limit_rpm}" for m in motors)
+        f"{m.id}={int(m.mtype)}={1 if m.use else 0}={1 if m.use_limit else 0}={m.limit_rpm}"
+        for m in motors if m.mtype != MotorType.OLD_CTRL)
+
+
+def parse_ctrl_list(data: str) -> List[MotorEntry]:
+    """'2@172.27.0.82:502=1=700,...' -> 기존모터제어 목록 (ID@IP:PORT=사용=운전속도)."""
+    result: List[MotorEntry] = []
+    for item in filter(None, data.split(",")):
+        try:
+            head, use, rpm = item.split("=")
+            mid, addr = head.split("@")
+            ip, port = addr.rsplit(":", 1)
+            result.append(MotorEntry(int(mid), MotorType.OLD_CTRL, use.strip() != "0",
+                                     ip=ip.strip(), port=int(port), set_rpm=int(rpm)))
+        except ValueError:
+            log.warning("기존모터제어 설정 형식 오류(무시): %r", item)
+    return result
+
+
+def format_ctrl_list(motors: List[MotorEntry]) -> str:
+    return ",".join(f"{m.id}@{m.ip}:{m.port}={1 if m.use else 0}={m.set_rpm}"
+                    for m in motors if m.mtype == MotorType.OLD_CTRL)
 
 
 def read_config_text(path: str) -> str:
@@ -147,7 +175,8 @@ def load_config(path: str) -> Tuple[Dict[str, LineConfig], Dict[str, List[MotorE
             source_line=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_LINE", ""),
             source_id=_to_int(_ini_read(ini, SEC_LINE, f"{s}_SOURCE_ID", "0")),
         )
-        motors[s] = parse_motor_list(_ini_read(ini, SEC_MOTOR, f"{s}_MOTORS", ""))
+        motors[s] = (parse_motor_list(_ini_read(ini, SEC_MOTOR, f"{s}_MOTORS", ""))
+                     + parse_ctrl_list(_ini_read(ini, SEC_CTRL, f"{s}_MOTORS", "")))
         idx += 2
     return configs, motors
 
@@ -170,6 +199,11 @@ def build_config_text(configs: Dict[str, LineConfig], motors: Dict[str, List[Mot
     lines.append(f"[{SEC_MOTOR}]")
     for s in HOUSE_LINES:
         lines.append(f"{s}_MOTORS={format_motor_list(motors.get(s, []))}")
+    # 기존모터제어가 하나라도 있을 때만 섹션 기록 (없으면 운영 프로그램과 바이트 단위로 같은 파일 유지)
+    if any(m.mtype == MotorType.OLD_CTRL for s in HOUSE_LINES for m in motors.get(s, [])):
+        lines.append(f"[{SEC_CTRL}]")
+        for s in HOUSE_LINES:
+            lines.append(f"{s}_MOTORS={format_ctrl_list(motors.get(s, []))}")
     return "\r\n".join(lines) + "\r\n"
 
 

@@ -64,6 +64,10 @@ for code, (olds, news) in ZONES.items():
         source_ip=og.host, source_port=og.port, target_ip=ng.host, target_port=ng.port,
         source_manual=False, source_line=line, source_id=sid)
 plant.houses["H1R8"].add_motor(9, MotorType.NEW_MOTOR, False)     # 중지 예시
+# 기존모터제어 예시: 1구역 기존모터 게이트웨이의 ECblue 10번을 700 RPM 으로 지정
+old_gw["H1R1"].add_ecblue(10, analog_rpm=0)
+plant.houses["H1R1"].add_motor(10, MotorType.OLD_CTRL, True, ip=old_gw["H1R1"].host,
+                               port=old_gw["H1R1"].port, set_rpm=700)
 plant.save()
 
 W, H = (int(v) for v in os.environ.get("SHOT_SIZE", "1920x1040").split("x"))
@@ -169,6 +173,25 @@ def motor_add():
             ("1", d.header), ("2", d.lbl_house), ("3", d.rb_oldmotor), ("4", d.rb_newmotor), ("5", d.txtID.master),
             ("6", d.rb_use), ("7", d.rb_nouse), ("8", d.cbUSELIMIT), ("9", d.txtLIMITRPM.master),
             ("10", d.BtnSave), ("11", d.BtnCancel)]]
+        d.destroy()
+        root.after(100, motor_add_ctrl)
+    root.after(500, m)
+    d.show_modal()
+
+
+def motor_add_ctrl():
+    d = dialogs.MotorDialog(root, plant, win.images, "H1R1", "ADD")
+    d.motor_type_var.set(2)
+    d._on_type()
+    d.txtID.insert(0, "2")
+    d.txtSETRPM.insert(0, "700")
+
+    def m():
+        crop_dialog("dlg_motor_add_ctrl", d)
+        ox, oy = d.winfo_rootx(), d.winfo_rooty()
+        MARKS["dlg_motor_add_ctrl"] = [(n, bbox(w, ox, oy)) for n, w in [
+            ("15", d.rb_ctrlmotor), ("16", d.txtCIP.master), ("17", d.txtCPORT.master),
+            ("18", d.txtSETRPM.master)]]
         d.destroy()
         root.after(100, motor_mod)
     root.after(500, m)

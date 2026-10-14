@@ -231,6 +231,9 @@ class MotorListView(tk.Frame):
         """종류 그림 이름과 툴팁 (운영 MotorTypeTemplate)."""
         if m.mtype == MotorType.OLD_MOTOR:
             return "oldmotor", "기존모터"
+        if m.mtype == MotorType.OLD_CTRL:
+            tip = f"기존모터제어 {m.ip}:{m.port} / 지정속도 {m.set_rpm} RPM"
+            return "oldmotor_ctrl", tip + (f"\n{m.ctrl_note}" if m.ctrl_note else "")
         if m.use_limit:
             return "newmotor_limit", "신규모터(제한모드)"
         return "newmotor", "신규모터"

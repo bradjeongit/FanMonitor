@@ -38,7 +38,7 @@ class Plant:
         for s in HOUSE_LINES:
             h = HouseLine(s, self)
             for e in motors.get(s, []):
-                h.add_motor(e.id, e.mtype, e.use, e.use_limit, e.limit_rpm)
+                h.add_motor(e.id, e.mtype, e.use, e.use_limit, e.limit_rpm, e.ip, e.port, e.set_rpm)
             self.houses[s] = h
         if not self.monitoring:
             self.save()

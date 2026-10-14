@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
-from ..constants import MAX_RPM, MOTOR_ID_MAX, MOTOR_ID_MIN, MotorType
+from ..constants import CTRL_ID_MAX, CTRL_ID_MIN, MAX_RPM, MOTOR_ID_MAX, MOTOR_ID_MIN, MotorType
 from ..helpers import check_integer, check_valid_ip, get_house_name
 from ..house import motor_key
 from . import theme as T
@@ -342,7 +342,8 @@ class MotorDialog(BaseDialog):
                  on_changed: Optional[Callable[[], None]] = None) -> None:
         mode = mode if mode in ("ADD", "MOD") else "ADD"
         title = "모터 추가" if mode == "ADD" else "모터 수정/삭제"
-        super().__init__(owner, title, T.MOTOR_DIALOG_HEADER, 400, 300)
+        # 기존모터제어(3번째 종류)와 그 입력줄 2개를 위해 운영 프로그램(400x300)보다 크게
+        super().__init__(owner, title, T.MOTOR_DIALOG_HEADER, 520, 340)
         self.plant = plant
         self.images = images
         self.house_code = house_code
@@ -360,10 +361,13 @@ class MotorDialog(BaseDialog):
         self.motor_type_var = tk.IntVar(value=-1)
         self.add_type_line = tk.Frame(r, bg=T.WHITE)
         self.rb_oldmotor = self._radio(self.add_type_line, "기존모터", "oldmotor",
-                                       self.motor_type_var, int(MotorType.OLD_MOTOR), self._on_type)
+                                       self.motor_type_var, int(MotorType.OLD_MOTOR), self._on_type, 10)
         self.rb_newmotor = self._radio(self.add_type_line, "신규모터", "newmotor",
-                                       self.motor_type_var, int(MotorType.NEW_MOTOR), self._on_type)
-        self.rb_newmotor.pack_configure(padx=(8, 0))
+                                       self.motor_type_var, int(MotorType.NEW_MOTOR), self._on_type, 10)
+        self.rb_newmotor.pack_configure(padx=(6, 0))
+        self.rb_ctrlmotor = self._radio(self.add_type_line, "기존모터제어", "oldmotor_ctrl",
+                                        self.motor_type_var, int(MotorType.OLD_CTRL), self._on_type, 10)
+        self.rb_ctrlmotor.pack_configure(padx=(6, 0))
         self.mod_type_line = tk.Frame(r, bg=T.WHITE)
         self.img_type = tk.Label(self.mod_type_line, bg=T.WHITE)
         self.img_type.pack(side="left", padx=(0, 5))
@@ -373,7 +377,8 @@ class MotorDialog(BaseDialog):
         r = self.row("모터ID", title_size=12)
         self.add_id_line = tk.Frame(r, bg=T.WHITE)
         self.txtID = self.entry(self.add_id_line, 60, size=11, bold=False)
-        tk.Label(self.add_id_line, text=f"정수({MOTOR_ID_MIN}~{MOTOR_ID_MAX})", bg=T.WHITE).pack(side="left", padx=10)
+        self.lbl_id_range = tk.Label(self.add_id_line, text=f"정수({MOTOR_ID_MIN}~{MOTOR_ID_MAX})", bg=T.WHITE)
+        self.lbl_id_range.pack(side="left", padx=10)
         self.mod_id_line = tk.Frame(r, bg=T.WHITE)
         self.lblID = tk.Label(self.mod_id_line, text="00", bg=T.WHITE, font=T.font(11, bold=True))
         self.lblID.pack(side="left")
@@ -401,6 +406,27 @@ class MotorDialog(BaseDialog):
         self.txtLIMITRPM = self.entry(inner, 65, size=11, bold=False)
         tk.Label(inner, text="RPM", bg=T.WHITE).pack(side="left", padx=2)
         self.limit_row_line = DottedSeparator(self.limit_holder)
+        # 기존모터제어 줄 2개 (접속 IP/PORT, 운전속도) - 기존모터제어만 표시
+        self.ctrl_holder = tk.Frame(self.body, bg=T.WHITE)
+        self.ctrl_holder.pack(side="top", fill="x")
+        self.ctrl_ip_row = tk.Frame(self.ctrl_holder, bg=T.WHITE, height=40)
+        self.ctrl_ip_row.pack_propagate(False)
+        tk.Label(self.ctrl_ip_row, text="접속 IP/PORT", bg=T.WHITE, fg=T.TEXT_DARK,
+                 font=T.font(12, bold=True)).place(x=10, rely=0.5, anchor="w")
+        inner = tk.Frame(self.ctrl_ip_row, bg=T.WHITE)
+        inner.place(x=130, rely=0.5, anchor="w")
+        self.txtCIP = self.entry(inner, 130, size=11, bold=False)
+        tk.Label(inner, text="/", bg=T.WHITE).pack(side="left", padx=4)
+        self.txtCPORT = self.entry(inner, 60, size=11, bold=False)
+        self.ctrl_speed_row = tk.Frame(self.ctrl_holder, bg=T.WHITE, height=40)
+        self.ctrl_speed_row.pack_propagate(False)
+        tk.Label(self.ctrl_speed_row, text="운전속도", bg=T.WHITE, fg=T.TEXT_DARK,
+                 font=T.font(12, bold=True)).place(x=10, rely=0.5, anchor="w")
+        inner = tk.Frame(self.ctrl_speed_row, bg=T.WHITE)
+        inner.place(x=130, rely=0.5, anchor="w")
+        self.txtSETRPM = self.entry(inner, 65, size=11, bold=False)
+        tk.Label(inner, text=f"RPM  정수(0~{MAX_RPM}), 이 속도로 계속 운전", bg=T.WHITE).pack(side="left", padx=4)
+        self.ctrl_row_line = DottedSeparator(self.ctrl_holder)
 
         left = tk.Frame(self.footer, bg=T.WHITE)
         left.pack(side="left", padx=5)
@@ -414,10 +440,11 @@ class MotorDialog(BaseDialog):
 
         self._load()
 
-    def _radio(self, parent, text: str, image: str, var: tk.IntVar, value: int, command=None) -> tk.Radiobutton:
+    def _radio(self, parent, text: str, image: str, var: tk.IntVar, value: int, command=None,
+               size: int = 11) -> tk.Radiobutton:
         rb = tk.Radiobutton(parent, text=" " + text, image=self.images.get(image, 20), compound="left",
                             variable=var, value=value, bg=T.WHITE, activebackground=T.WHITE,
-                            font=T.font(11, bold=True), highlightthickness=0, command=command)
+                            font=T.font(size, bold=True), highlightthickness=0, command=command)
         rb.pack(side="left")
         return rb
 
@@ -433,9 +460,27 @@ class MotorDialog(BaseDialog):
     def limit_row_visible(self) -> bool:
         return bool(self.limit_row.winfo_manager())
 
+    def show_ctrl_rows(self, show: bool) -> None:
+        if show:
+            self.ctrl_ip_row.pack(side="top", fill="x", padx=(10, 10))
+            self.ctrl_speed_row.pack(side="top", fill="x", padx=(10, 10))
+            self.ctrl_row_line.pack(side="top", fill="x")
+        else:
+            self.ctrl_ip_row.pack_forget()
+            self.ctrl_speed_row.pack_forget()
+            self.ctrl_row_line.pack_forget()
+
+    @property
+    def ctrl_rows_visible(self) -> bool:
+        return bool(self.ctrl_ip_row.winfo_manager())
+
     def _on_type(self) -> None:
-        """운영 rb_oldmotor_Checked / rb_newmotor_Checked"""
-        self.show_limit_row(self.motor_type_var.get() == int(MotorType.NEW_MOTOR))
+        """운영 rb_oldmotor_Checked / rb_newmotor_Checked + 기존모터제어"""
+        t = self.motor_type_var.get()
+        self.show_limit_row(t == int(MotorType.NEW_MOTOR))
+        self.show_ctrl_rows(t == int(MotorType.OLD_CTRL))
+        lo, hi = (CTRL_ID_MIN, CTRL_ID_MAX) if t == int(MotorType.OLD_CTRL) else (MOTOR_ID_MIN, MOTOR_ID_MAX)
+        self.lbl_id_range.configure(text=f"정수({lo}~{hi})")
 
     def _load(self) -> None:
         """운영 wMotor_Loaded"""
@@ -444,8 +489,12 @@ class MotorDialog(BaseDialog):
             self.add_type_line.pack(side="left")
             self.add_id_line.pack(side="left")
             self.show_limit_row(False)
+            self.show_ctrl_rows(False)
             self.txtID.delete(0, "end")
             self.txtLIMITRPM.insert(0, "0")
+            cfg = self.plant.configs[self.house_code]       # 기존모터 게이트웨이 주소를 기본값으로
+            self.txtCIP.insert(0, cfg.source_ip)
+            self.txtCPORT.insert(0, str(cfg.source_port))
             self.after(50, self.txtID.focus_set)
         else:
             self.BtnDelete.pack(side="left")
@@ -455,8 +504,10 @@ class MotorDialog(BaseDialog):
             m = self.plant.houses[self.house_code].get_motor(self.mod_dkey or "")
             if m is not None:
                 old = m.mtype == MotorType.OLD_MOTOR
-                self.img_type.configure(image=self.images.get("oldmotor" if old else "newmotor", 20))
-                self.lbl_type.configure(text="기존모터" if old else "신규모터")
+                ctrl = m.mtype == MotorType.OLD_CTRL
+                img = "oldmotor_ctrl" if ctrl else ("oldmotor" if old else "newmotor")
+                self.img_type.configure(image=self.images.get(img, 20))
+                self.lbl_type.configure(text="기존모터제어" if ctrl else ("기존모터" if old else "신규모터"))
                 self.motor_id = m.id
                 self.motor_type = m.mtype
                 self.lblID.configure(text=str(m.id))
@@ -464,7 +515,16 @@ class MotorDialog(BaseDialog):
                 self.cbUSELIMIT.current(0 if m.use_limit else 1)
                 self.txtLIMITRPM.delete(0, "end")
                 self.txtLIMITRPM.insert(0, str(m.limit_rpm))
-                self.show_limit_row(not old)
+                self.show_limit_row(m.mtype == MotorType.NEW_MOTOR)
+                if ctrl:
+                    self.show_ctrl_rows(True)
+                    self.txtCIP.insert(0, m.ip)
+                    self.txtCPORT.insert(0, str(m.port))
+                    for e in (self.txtCIP, self.txtCPORT):        # 접속처는 수정 불가 (삭제 후 다시 추가)
+                        e.configure(state="readonly", readonlybackground=T.WHITE)
+                    self.txtSETRPM.insert(0, str(m.set_rpm))
+                    self.ctrl_ip = m.ip
+                    self.ctrl_port = m.port
         self.lbl_house.configure(text=get_house_name(self.house_code))
 
     def on_default(self) -> None:
@@ -477,15 +537,16 @@ class MotorDialog(BaseDialog):
             new_id, new_type = self.motor_id, self.motor_type
         else:
             t = self.motor_type_var.get()
-            if t not in (0, 1):
+            if t not in (0, 1, 2):
                 return self.error("모터 종류을 선택해 주세요.", "오류")
             new_type = MotorType(t)
             txt = self.txtID.get()
             if txt == "" or not check_integer(txt):
                 return self.error("모터 ID값을 숫자로 입력해주세요.", "오류")
             new_id = try_parse_int(txt) or 0
-            if new_id < MOTOR_ID_MIN or new_id > MOTOR_ID_MAX:
-                return self.error(f"모터ID값은 숫자로 {MOTOR_ID_MIN}-{MOTOR_ID_MAX}범위로 입력하셔야 합니다.", "오류")
+            lo, hi = (CTRL_ID_MIN, CTRL_ID_MAX) if new_type == MotorType.OLD_CTRL else (MOTOR_ID_MIN, MOTOR_ID_MAX)
+            if new_id < lo or new_id > hi:
+                return self.error(f"모터ID값은 숫자로 {lo}-{hi}범위로 입력하셔야 합니다.", "오류")
 
         u = self.use_var.get()
         if u not in (0, 1):
@@ -503,18 +564,39 @@ class MotorDialog(BaseDialog):
         if limit_rpm < 0 or limit_rpm > MAX_RPM:
             return self.error(f"제한모드 RPM값은 숫자 0~{MAX_RPM}범위로 입력하셔야 합니다.", "오류")
 
-        if not self.ask(f"해당 모터정보를 {msg}하시겠습니까?", msg):
+        cip, cport, set_rpm = "", 0, None
+        if new_type == MotorType.OLD_CTRL:
+            cip = self.txtCIP.get().strip()
+            if cip == "":
+                return self.error("기존모터제어 접속 IP를 입력해 주세요.", "오류")
+            if not check_valid_ip(cip):
+                return self.error("기존모터제어 접속 IP가 올바른 형식이 아닙니다..", "오류")
+            cport_t = self.txtCPORT.get().strip()
+            cport = try_parse_int(cport_t) if check_integer(cport_t) and cport_t else None
+            if cport is None or cport < 1 or cport > 65535:
+                return self.error("기존모터제어 접속 PORT를 숫자로 1~65535범위로 입력해 주세요.", "오류")
+            sr_t = self.txtSETRPM.get().strip()
+            set_rpm = try_parse_int(sr_t) if check_integer(sr_t) and sr_t else None
+            if set_rpm is None or set_rpm < 0 or set_rpm > MAX_RPM:
+                return self.error(f"운전속도를 숫자 0~{MAX_RPM}범위로 입력해주세요.", "오류")
+            question = (f"해당 모터정보를 {msg}하시겠습니까?\n\n"
+                        f"구역 제어를 시작하면 이 모터는 아날로그 제어신호 대신 통신으로 받은 속도"
+                        f"({set_rpm} RPM)로 계속 운전합니다.")
+        else:
+            question = f"해당 모터정보를 {msg}하시겠습니까?"
+
+        if not self.ask(question, msg):
             return
-        if new_type == MotorType.OLD_MOTOR:
+        if new_type != MotorType.NEW_MOTOR:
             use_limit, limit_rpm = False, 0
         house = self.plant.houses[self.house_code]
-        dkey = motor_key(new_type, new_id)
+        dkey = motor_key(new_type, new_id, cip, cport)
         if self.wmode == "ADD":
             if house.get_motor(dkey) is not None:
                 return self.error("이미 해당 모터 종류와 ID를 갖는 모터가 있습니다. 확인바랍니다.", "오류")
-            house.add_motor(new_id, new_type, new_use, use_limit, limit_rpm)
+            house.add_motor(new_id, new_type, new_use, use_limit, limit_rpm, cip, cport, set_rpm or 0)
         else:
-            house.mod_motor(dkey, new_use, use_limit, limit_rpm)
+            house.mod_motor(self.mod_dkey or dkey, new_use, use_limit, limit_rpm, set_rpm=set_rpm)
         self.plant.save()
         if self.on_changed:
             self.on_changed()
@@ -522,7 +604,10 @@ class MotorDialog(BaseDialog):
 
     def on_delete(self) -> None:
         """운영 BtnDelete_Click"""
-        if not self.ask("해당 모터정보를 삭제하시겠습니까?", "삭제"):
+        question = "해당 모터정보를 삭제하시겠습니까?"
+        if self.motor_type == MotorType.OLD_CTRL:
+            question += "\n\n삭제해도 모터는 마지막으로 받은 속도로 계속 운전합니다(통신 제어모드 유지)."
+        if not self.ask(question, "삭제"):
             return
         if self.motor_type == MotorType.OLD_MOTOR:
             if self.plant.find_reference_users(self.house_code, self.motor_id):

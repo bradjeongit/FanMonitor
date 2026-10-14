@@ -7,7 +7,7 @@ from motor_monitor import constants as C
 from motor_monitor import modbus
 from motor_monitor.config import MotorEntry
 from motor_monitor.constants import MotorStatus, MotorType
-from motor_monitor.crypto3des import TripleDES, decrypt_config, encrypt_config
+from motor_monitor.crypto3des import TripleDES, decrypt_config, encrypt_config  # noqa: F401
 from motor_monitor.helpers import check_integer, check_valid_ip, get_house_name, zone_number
 from motor_monitor.plant import Plant
 from motor_monitor.simulator import FakeGateway
@@ -338,3 +338,107 @@ def test_monitoring_mode_never_writes(tmp_path, fast):
     finally:
         gw_old.stop()
         gw_new.stop()
+
+
+# ---------------------------------------------------------------- 기존모터제어 (ECblue)
+def test_ecblue_frames_and_mode_bits():
+    assert modbus.build_read_holding(1, 2, modbus.ECB_H_CONTROL, 4) == bytes([0, 1, 0, 0, 0, 6, 2, 3, 0, 1, 0, 4])
+    assert modbus.build_read_input(1, 2, 14, 1) == bytes([0, 1, 0, 0, 0, 6, 2, 4, 0, 14, 0, 1])
+    assert modbus.ecb_mode_value(0x0000) == 0x0101 and modbus.ecb_mode_value(0x00F3) == 0x01F1
+    assert modbus.ecb_mode_ok(0x0101) and not modbus.ecb_mode_ok(0x0001) and not modbus.ecb_mode_ok(0x0100)
+    exc = modbus.parse_response(bytes([0, 7, 0, 0, 0, 3, 2, 0x86, 4]))
+    assert exc.tid == 7 and exc.fc == 6 and exc.exception == 4
+
+
+def test_ctrl_motor_config_roundtrip(tmp_path):
+    path = tmp_path / "Config.dll"
+    plant = Plant(str(path))
+    plant.load()
+    text = decrypt_config(path.read_bytes())
+    assert "CTRL_MOTOR_CONFIG" not in text                        # 없으면 섹션도 없음 (운영 파일과 동일)
+    h = plant.houses["H1R2"]
+    h.add_motor(66, MotorType.OLD_MOTOR, True)
+    h.add_motor(66, MotorType.OLD_CTRL, True, ip="172.27.0.84", port=502, set_rpm=700)
+    h.add_motor(68, MotorType.OLD_CTRL, False, ip="172.27.0.84", port=502, set_rpm=650)
+    plant.save()
+    text = decrypt_config(path.read_bytes())
+    assert "H1R2_MOTORS=66=0=1=0=0\r\n" in text                    # 운영 형식 목록에는 기존모터제어 제외
+    assert "[CTRL_MOTOR_CONFIG]" in text and "H1R2_MOTORS=66@172.27.0.84:502=1=700,68@172.27.0.84:502=0=650" in text
+    p2 = Plant(str(path))
+    p2.load()
+    m = p2.houses["H1R2"].get_motor("2_66@172.27.0.84:502")
+    assert m.mtype == MotorType.OLD_CTRL and m.set_rpm == 700 and m.port == 502 and m.use
+    assert p2.houses["H1R2"].get_motor("0_66") is not None       # 같은 ID 의 읽기용 기존모터와 별개
+    assert p2.houses["H1R2"].get_old_motor_ids() == ["66"]
+
+
+def test_ctrl_motor_sets_speed_and_keeps_it(tmp_path, fast):
+    gw = FakeGateway().start()
+    gw.add_ecblue(2, analog_rpm=0, h4=0, pin_level=0)              # 아날로그 신호 끊김(0 RPM), PIN 보호 0단계
+    try:
+        plant = Plant(str(tmp_path / "Config.dll"))
+        plant.load()
+        h = plant.houses["H1R1"]
+        h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, set_rpm=700)
+        key = f"2_2@{gw.host}:{gw.port}"
+        plant.start_line("H1R1")
+        assert _wait(lambda: gw.ecb_speed(2) == 700)
+        regs = gw.ecb[2]["h"]
+        assert regs[4] == 0x0101 and regs[1] & 1 and regs[2] == 700   # 제어모드 1 + Enable + 운전속도
+        assert (2, 0, 10) in gw.writes                                 # PIN 0010 입력 후 h4 변경
+        assert _wait(lambda: h.get_motor(key).rpm == 700 and h.get_motor(key).status == MotorStatus.OK)
+        # 모터가 리셋되어 속도가 0 이 되어도 다시 지정 속도로 맞춤
+        regs[2] = 0
+        assert _wait(lambda: gw.ecb_speed(2) == 700)
+        # 운전속도 변경
+        h.mod_motor(key, True, set_rpm=550)
+        assert _wait(lambda: gw.ecb_speed(2) == 550)
+        assert gw.ecb[2]["h4_writes"] == 1                              # 영구저장 h4 는 한 번만 씀
+        # 사용 중지 -> 운전속도 0 한 번
+        h.mod_motor(key, False)
+        assert _wait(lambda: gw.ecb[2]["h"][2] == 0)
+        plant.stop_line("H1R1")
+        h.service_stop(join=True)
+    finally:
+        gw.stop()
+
+
+def test_ctrl_motor_mode_write_refused_is_limited(tmp_path, fast):
+    gw = FakeGateway().start()
+    gw.add_ecblue(5, analog_rpm=300, h4=0)
+    gw.ecb[5]["refuse_h4"] = True
+    try:
+        plant = Plant(str(tmp_path / "Config.dll"))
+        plant.load()
+        h = plant.houses["H1R1"]
+        h.add_motor(5, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, set_rpm=700)
+        key = f"2_5@{gw.host}:{gw.port}"
+        plant.start_line("H1R1")
+        assert _wait(lambda: h.get_motor(key).ctrl_note.startswith("제어모드 설정 실패 (PIN"), timeout=8)
+        n_tries = sum(1 for r in gw.requests if r[7] == 6 and r[9] == modbus.ECB_H_CONTROLMODE)
+        time.sleep(0.5)
+        assert n_tries == C.CTRL_MODE_WRITE_MAX_TRIES                     # 영구저장 레지스터 반복 쓰기 방지
+        assert sum(1 for r in gw.requests if r[7] == 6 and r[9] == modbus.ECB_H_CONTROLMODE) == n_tries
+        assert h.get_motor(key).had_err and h.get_motor(key).rpm == 300   # 실제 속도는 계속 표시
+        h.service_stop(join=True)
+    finally:
+        gw.stop()
+
+
+def test_ctrl_motor_monitoring_never_writes(tmp_path, fast):
+    gw = FakeGateway().start()
+    gw.add_ecblue(2, analog_rpm=450, h4=0)
+    try:
+        plant = Plant(str(tmp_path / "Config.dll"), monitoring=True)
+        plant.load()
+        h = plant.houses["H1R1"]
+        h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, set_rpm=700)
+        key = f"2_2@{gw.host}:{gw.port}"
+        plant.start_line("H1R1")
+        assert _wait(lambda: h.get_motor(key).rpm == 450)
+        h.mod_motor(key, False)
+        time.sleep(0.5)
+        assert gw.writes == [] and all(r[7] != 6 for r in gw.requests)
+        h.service_stop(join=True)
+    finally:
+        gw.stop()
