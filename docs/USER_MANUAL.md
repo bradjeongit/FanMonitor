@@ -43,6 +43,9 @@
    - `--config 경로` : 다른 설정 파일 사용 (기본은 프로그램 폴더의 `Config.dll`)
    - `--debug` : 통신 패킷까지 로그에 기록
 
+### 2.2-1 최신 버전으로 업데이트
+git 으로 받은 프로그램 폴더의 **`update.bat`** 을 더블클릭하면 최신 버전으로 바뀝니다 ("Update complete."). 설정 파일 `Config.dll` 과 로그는 바뀌지 않습니다. 실행 중인 프로그램은 종료 후 다시 실행해야 새 버전이 적용됩니다. exe 로 쓰는 경우 업데이트 후 `build_exe.bat` 으로 다시 만드세요.
+
 ### 2.3 실행파일(.exe)로 만들기
 `build_exe.bat` 을 더블클릭하면 `dist\BLDC_MOTOR_MONITOR\BLDC_MOTOR_MONITOR.exe` 가 만들어집니다. 이 폴더째 현장 PC 에 복사하고 `Config.dll` 을 exe 옆에 둡니다.
 

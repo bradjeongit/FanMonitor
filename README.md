@@ -19,6 +19,10 @@ build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
 설정은 실행 폴더의 `Config.dll`(운영 프로그램과 같은 암호화 파일), 로그는 `logs/` 에 저장됩니다.
 `Config.dll` 은 현장 정보가 들어 있어 저장소에 올리지 않습니다(.gitignore).
 
+## 최신 버전으로 업데이트
+git 으로 받은 폴더에서 `update.bat` 을 더블클릭하면 GitHub `main` 의 최신 내용으로 바뀝니다.
+`Config.dll` 과 `logs/` 는 git 관리 대상이 아니라 업데이트해도 그대로 유지됩니다.
+
 ## 시험
 ```
 python -m pytest                                  # 로직 시험
