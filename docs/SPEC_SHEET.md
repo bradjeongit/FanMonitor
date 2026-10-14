@@ -447,7 +447,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 | `run.py` | 실행 시작점 | – |
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창), `--monitoring` 옵션 | `Application`, `MainWindow_Loaded` |
 | `run_monitoring.bat` | 모니터링 모드로 실행 (exe 가 있으면 exe, 없으면 python) | – |
-| `tools/ecblue_check.py` | 기존모터제어(ECblue) 현장 점검: 1단계 읽기 전용(h1~h4, i14), 2단계 `--rpm` 지정 시 `HouseLine._ctrl_job` 으로 실제 제어 시험 → 판정 → 시험 전 h1/h2/h4 복원. 임시 설정 파일 사용(운영 Config.dll 미접촉), 결과 `logs/ecblue_check_*.txt` | – |
+| `tools/ecblue_check.py` | 기존모터제어(ECblue) 현장 점검: 1단계 읽기 전용(h1~h4, i14), 2단계 `--rpm` 지정 시 `HouseLine._ctrl_job` 으로 실제 제어 시험 → 판정 → 시험 전 h1/h2/h4 복원. 임시 설정 파일 사용(운영 Config.dll 미접촉), 결과 `logs/ecblue_check_*.txt`. `--ids` 범위(170-190)·9개 이상이면 i14 만 읽어 응답 ID 찾기, `--timeout`, 응답 없을 때 받은 원시 데이터 표시 | – |
 | `update.bat` | 로컬 폴더를 GitHub `main` 최신 내용으로 업데이트 (`git pull --ff-only`, Config.dll·logs 유지) | – |
 | `motor_monitor/constants.py` | 상수(5장) | `M_Variables` |
 | `motor_monitor/crypto3des.py` | Config.dll 암호화/복호화 | `C_3DES` |
