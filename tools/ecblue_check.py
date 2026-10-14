@@ -5,6 +5,10 @@
   1단계 - 읽기 전용 (모터에 아무것도 쓰지 않음):
     python tools/ecblue_check.py --ip 172.27.0.95 --ids 180 176
 
+  응답이 없을 때 - 같은 통신장치의 운영 기존모터와 비교, ID 범위 찾기, 응답 대기시간 늘리기:
+    python tools/ecblue_check.py --ip 172.27.0.95 --ids 155 159 180 176
+    python tools/ecblue_check.py --ip 172.27.0.95 --ids 170-190 247 --timeout 1
+
   2단계 - 실제 제어 시험 (프로그램의 기존모터제어 코드로 지정 속도 운전 -> 끝나면 원래 설정 복원):
     python tools/ecblue_check.py --ip 172.27.0.95 --ids 180 176 --rpm 500 --seconds 90
 
@@ -63,6 +67,7 @@ class Link:
         self.sock = socket.create_connection((ip, port), timeout=5.0)
         self.sock.settimeout(timeout)
         self.tid = 0
+        self.raw = b""      # 마지막 요청 동안 받은 모든 바이트 (진단용)
 
     def request(self, build, *args) -> tuple:
         """(응답 Response 또는 None, 응답시간 ms)"""
@@ -71,6 +76,7 @@ class Link:
         t0 = time.monotonic()
         self.sock.sendall(frame)
         splitter = modbus.FrameSplitter()
+        self.raw = b""
         deadline = t0 + self.sock.gettimeout()
         while time.monotonic() < deadline:
             try:
@@ -79,6 +85,7 @@ class Link:
                 break
             if not data:
                 raise OSError("통신장치가 연결을 끊음")
+            self.raw += data
             for f in splitter.feed(data):
                 r = modbus.parse_response(f)
                 if r is not None and r.tid == self.tid:
@@ -92,9 +99,13 @@ class Link:
             pass
 
 
-def describe(r) -> str:
+TIMEOUT = 2.0
+
+
+def describe(r, raw: bytes = b"") -> str:
     if r is None:
-        return "응답 없음 (2초)"
+        extra = f", 다른 데이터 수신: {raw[:40].hex(' ')}" if raw else ", 받은 데이터 없음"
+        return f"응답 없음 ({TIMEOUT:g}초{extra})"
     if r.exception is not None:
         return f"예외 응답 {r.exception}: {EXCEPTIONS.get(r.exception, '알 수 없음')}"
     return "정상"
@@ -102,8 +113,10 @@ def describe(r) -> str:
 
 def read_state(link: Link, uid: int) -> Dict[str, object]:
     hold, t_h = link.request(modbus.build_read_holding, uid, modbus.ECB_H_CONTROL, 4)
+    raw_h = link.raw
     speed, t_i = link.request(modbus.build_read_input, uid, modbus.ECB_I_SPEED, 1)
-    st: Dict[str, object] = {"hold": hold, "speed": speed, "t_h": t_h, "t_i": t_i}
+    st: Dict[str, object] = {"hold": hold, "speed": speed, "t_h": t_h, "t_i": t_i,
+                             "raw_h": raw_h, "raw_i": link.raw}
     if hold is not None and hold.exception is None and len(hold.values) >= 4:
         st["h1"], st["h2"], st["h3"], st["h4"] = hold.values[:4]
     if speed is not None and speed.exception is None and speed.values:
@@ -114,7 +127,7 @@ def read_state(link: Link, uid: int) -> Dict[str, object]:
 def fmt_state(st: Dict[str, object]) -> List[str]:
     lines = []
     t = f" ({st['t_h']:.0f} ms)" if st.get("t_h") is not None else ""
-    lines.append(f"  h1~h4 읽기 (FC03 주소1, 4개): {describe(st['hold'])}{t}")
+    lines.append(f"  h1~h4 읽기 (FC03 주소1, 4개): {describe(st['hold'], st.get('raw_h', b''))}{t}")
     if "h4" in st:
         h1, h2, h3, h4 = st["h1"], st["h2"], st["h3"], st["h4"]
         mode = h4 & modbus.ECB_MODE_MASK
@@ -126,22 +139,24 @@ def fmt_state(st: Dict[str, object]) -> List[str]:
                      f", 버스 Enable(bit8)={'켜짐' if h4 & modbus.ECB_BUSCON_ENABLE else '꺼짐'}")
         lines.append(f"    -> 버스 속도제어 준비: {'됨' if modbus.ecb_mode_ok(h4) else '안 됨 (2단계에서 프로그램이 h4 를 설정)'}")
     t = f" ({st['t_i']:.0f} ms)" if st.get("t_i") is not None else ""
-    lines.append(f"  i14 실제 회전수 읽기 (FC04 주소14): {describe(st['speed'])}{t}"
+    lines.append(f"  i14 실제 회전수 읽기 (FC04 주소14): {describe(st['speed'], st.get('raw_i', b''))}{t}"
                  + (f"  -> {st['i14']} RPM" if "i14" in st else ""))
     return lines
 
 
 # ------------------------------------------------------------------ 1단계
 def stage_read(ip: str, port: int, ids: List[int], rep: Report) -> Dict[int, Dict[str, object]]:
-    rep(f"[1단계] 읽기 전용 점검 - {ip}:{port}")
+    rep(f"[1단계] 읽기 전용 점검 - {ip}:{port} (응답 대기 {TIMEOUT:g}초)")
     try:
-        link = Link(ip, port)
+        link = Link(ip, port, TIMEOUT)
     except OSError as e:
         rep(f"  접속 실패: {e}")
         rep("  -> PC 와 통신장치의 네트워크(IP 대역, 케이블), 통신장치 전원, 포트 번호를 확인하세요.")
         return {}
     rep("  TCP 접속 성공")
     states = {}
+    if len(ids) > 8:
+        return scan_ids(link, ids, rep)
     try:
         for uid in ids:
             rep(f"- 모터 ID {uid}")
@@ -153,6 +168,27 @@ def stage_read(ip: str, port: int, ids: List[int], rep: Report) -> Dict[int, Dic
         rep(f"  통신 오류: {e}")
     finally:
         link.close()
+    return states
+
+
+def scan_ids(link: Link, ids: List[int], rep: Report) -> Dict[int, Dict[str, object]]:
+    """ID 가 많을 때: 실제 회전수(i14)만 읽어 응답하는 ID 를 찾음 (운영 기존모터 읽기와 같은 요청)."""
+    rep(f"  ID {len(ids)}개 찾기 - 실제 회전수(i14)만 읽음")
+    found, states = [], {}
+    try:
+        for uid in ids:
+            r, ms = link.request(modbus.build_read_input, uid, modbus.ECB_I_SPEED, 1)
+            if r is not None:
+                found.append(uid)
+                rep(f"  ID {uid}: {describe(r)}" + (f" -> {r.values[0]} RPM" if r.exception is None and r.values else "")
+                    + f" ({ms:.0f} ms)")
+            elif link.raw:
+                rep(f"  ID {uid}: {describe(r, link.raw)}")
+    except OSError as e:
+        rep(f"  통신 오류: {e}")
+    finally:
+        link.close()
+    rep(f"  응답한 ID: {found if found else '없음'}")
     return states
 
 
@@ -198,7 +234,7 @@ def stage_control(ip: str, port: int, ids: List[int], rpm: int, seconds: int, re
 def stage_restore(ip: str, port: int, before: Dict[int, Dict[str, object]], rep: Report) -> None:
     rep("[복원] 시험 전 설정으로 되돌리기 (h2 -> h1 -> PIN -> h4)")
     try:
-        link = Link(ip, port)
+        link = Link(ip, port, TIMEOUT)
     except OSError as e:
         rep(f"  접속 실패로 복원하지 못함: {e}")
         return
@@ -231,13 +267,26 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="기존모터제어(ECblue) 현장 점검")
     ap.add_argument("--ip", required=True)
     ap.add_argument("--port", type=int, default=502)
-    ap.add_argument("--ids", type=int, nargs="+", required=True)
+    ap.add_argument("--ids", nargs="+", required=True, help="모터 ID. 범위는 170-190 처럼")
+    ap.add_argument("--timeout", type=float, default=2.0, help="응답 대기 시간(초), 기본 2")
     ap.add_argument("--rpm", type=int, help="2단계 제어 시험 운전속도 (생략하면 1단계 읽기만)")
     ap.add_argument("--seconds", type=int, default=90, help="2단계 시험 시간(초)")
     ap.add_argument("--yes", action="store_true", help="2단계 시작 확인 질문 생략")
     ap.add_argument("--restore", choices=["ask", "yes", "no"], default="ask", help="2단계 후 원래 설정 복원")
     ap.add_argument("--no-log", action="store_true")
     a = ap.parse_args(argv)
+    global TIMEOUT
+    TIMEOUT = a.timeout
+    ids: List[int] = []
+    for part in a.ids:
+        lo, _, hi = part.partition("-")
+        try:
+            ids.extend(range(int(lo), int(hi or lo) + 1))
+        except ValueError:
+            ap.error(f"--ids {part}: 숫자 또는 170-190 형식")
+    a.ids = ids
+    if a.rpm is not None and len(ids) > 8:
+        ap.error("2단계(--rpm)는 ID 8개 이하로 지정하세요")
     for uid in a.ids:
         if not C.CTRL_ID_MIN <= uid <= C.CTRL_ID_MAX:
             ap.error(f"ID {uid}: {C.CTRL_ID_MIN}~{C.CTRL_ID_MAX} 범위여야 합니다")
@@ -249,7 +298,8 @@ def main(argv=None) -> int:
         os.makedirs("logs", exist_ok=True)
         path = os.path.join("logs", datetime.datetime.now().strftime("ecblue_check_%Y%m%d_%H%M%S.txt"))
     rep = Report(path)
-    rep(f"ECblue 점검 {datetime.datetime.now():%Y-%m-%d %H:%M:%S}  대상 {a.ip}:{a.port}  ID {a.ids}")
+    rep(f"ECblue 점검 {datetime.datetime.now():%Y-%m-%d %H:%M:%S}  대상 {a.ip}:{a.port}  "
+        f"ID {a.ids if len(a.ids) <= 8 else f'{len(a.ids)}개 ({a.ids[0]}~{a.ids[-1]})'}")
     before = stage_read(a.ip, a.port, a.ids, rep)
     ok_ids = [uid for uid, st in before.items() if "h4" in st]
     if a.rpm is None:
