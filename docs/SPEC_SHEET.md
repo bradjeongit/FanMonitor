@@ -22,6 +22,7 @@
 |---|---|---|
 | `SCR-` | 화면(메인 창) | `SCR-MAIN` |
 | `MAIN-` | 메인 화면 공통 요소 | `MAIN-MODE-BANNER` |
+| `TST-` | 기존모터 시험기(`SCR-TESTER`) 구성요소 (모터별은 `TST-{ID}-`, 공통은 `TST-*-`) | `TST-*-BTN-CONN` |
 | `DLG-` | 대화상자(팝업 창) | `DLG-LINE`, `DLG-MOTOR` |
 | `ZONE-` | 구역 패널 (n = 1~8) | `ZONE-3` (3구역) |
 | `MSG-` | 메시지 창(확인/오류 알림) | `MSG-LINE-02` |
@@ -46,6 +47,7 @@
 | ID | 이름 | 여는 방법 | 크기 | 코드 (파일 / 클래스) | 운영 프로그램 |
 |---|---|---|---|---|---|
 | `SCR-MAIN` | 메인 화면 (1~8구역 가로 배치). 실행 모드: **제어 모드**(기본) / **모니터링 모드**(4.4절) | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1500×450 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow` |
+| `SCR-TESTER` | 기존모터 시험기 (별도 프로그램, 3.6절) | `ecblue_tester.bat` / `python tools/ecblue_tester.py` | 620×520, 최소 460×470 | `tools/ecblue_tester.py` / `TesterApp`, `MotorPanel` | – (신규) |
 | `DLG-LINE` | 구역설정 창 | `ZONE-*-BTN-SET` 클릭 | 400×300 고정, 모달 | `motor_monitor/ui/dialogs.py` / `LineSettingsDialog` | `wHOUSE` |
 | `DLG-MOTOR` (ADD) | 모터 추가 창 | `ZONE-*-BTN-ADD` 클릭 | 520×340 고정, 모달 (기존모터제어 입력줄 때문에 운영 프로그램 400×300 보다 큼) | `dialogs.py` / `MotorDialog(mode="ADD")` | `wMotor` |
 | `DLG-MOTOR` (MOD) | 모터 수정/삭제 창 | `ZONE-*-LIST` 항목 더블클릭 | 520×340 고정, 모달 | `dialogs.py` / `MotorDialog(mode="MOD")` | `wMotor` |
@@ -226,6 +228,38 @@
 | `MSG-MOTOR-16` | 삭제 | 해당 모터정보를 삭제하시겠습니까? + "삭제해도 모터는 마지막으로 받은 속도로 계속 운전합니다(통신 제어모드 유지)." | 예/아니오 | 기존모터제어 삭제 |
 
 > 문구(맞춤법 포함)는 운영 프로그램 그대로입니다.
+
+### 3.6 `SCR-TESTER` 기존모터 시험기
+
+기존(ECblue) 모터 2대를 직접 시험하고 결과를 로그로 남기는 별도 프로그램입니다. 운영 프로그램·`Config.dll` 과 무관하게 동작합니다.
+대상은 코드에 고정되어 화면에서 바꿀 수 없습니다: `HOST = "172.27.0.95"`, `PORT = 502`, `MOTOR_IDS = (180, 176)` (`tools/ecblue_tester.py` 맨 위).
+
+![기존모터 시험기 구성요소 번호](images/tester_annotated.png)
+
+| 번호 | ID | 이름 | 종류 | 코드 객체 | 동작 |
+|---|---|---|---|---|---|
+| – | `TST-{ID}` | 모터 패널 (왼쪽 180, 오른쪽 176) | 묶음 | `MotorPanel` | 모터 1대의 상태와 버튼 |
+| 12 | `TST-*-DOT` / `TST-*-LBL-STATE` | 응답 상태 점 / 문구 | 점 / 글자 | `dot` / `lbl_state` | 초록 = 응답 정상, 빨강 = 응답 없음, 회색 = 시험 전. 마지막 응답 시각 |
+| 8 | `TST-*-LBL-RPM` | 실제 회전수 | 큰 글자 | `lbl_rpm` | i14 (RPM) |
+| 9 | `TST-*-LBL-INFO` | 상세 상태 | 글자 3줄 | `info` | 운전 h1(Enable), 지정 h2, 전류 i15(A), 제어모드 h4, 오류 i12(비트 이름) |
+| 1 | `TST-*-BTN-CONN` | 접속 테스트 | 버튼 | `btn_conn` | TCP 새로 접속 → h1~h4·i14(+i15)·i12 읽기 → 결과 로그. 쓰기 없음. 처음 성공한 h1/h2/h4 를 '원래 설정' 으로 기억 |
+| 2 | `TST-*-BTN-SPEED` | 현재 속도 | 버튼 | `btn_speed` | i14 만 1회 읽기 (운영 기존모터 읽기와 같은 요청). 쓰기 없음 |
+| 3 | `TST-*-BTN-MON` | 모니터링 시작/중지 | 버튼 | `btn_mon` | 2초(`MONITOR_INTERVAL_MS`)마다 전체 읽기, 화면 갱신, CSV 기록. 응답 끊김/회복을 로그 |
+| 4 | `TST-*-TXT-RPM` | 속도 입력 | 숫자칸 | `ent_rpm` | 0~1100, 50 단위 화살표 |
+| 5 | `TST-*-BTN-SET` | 지정 | 버튼 | `btn_set` | 확인 `TST-MSG-SET` → 제어모드가 아니면 경고 확인 `TST-MSG-MODE` 후 PIN(h0=10) → h4 → h1 Enable → h2 쓰기 → 다시 읽어 확인. 성공하면 지정 속도로 기억하고 모니터링 자동 시작 |
+| 6 | `TST-*-BTN-STOP` | 정지(0) | 버튼 | `btn_stop` | 확인 후 h2 = 0 (지정 속도 0 으로 유지) |
+| 7 | `TST-*-BTN-RESTORE` | 원래대로 | 버튼 | `btn_restore` | 확인 후 기억한 h2 → h1 → PIN → h4 순서로 복원 → 다시 읽어 확인. 지정 속도 해제 |
+| – | `TST-*-CHK-KEEP` | 모니터링 중 지정 속도 유지 | 체크 | `keep` | 기본 켜짐. 모니터링에서 h2 가 지정 속도와 다르면(정전 후 재시작 등) h2 다시 쓰기 |
+| – | `TST-*-LBL-TARGET` | 지정 속도 | 글자 | `lbl_target` | 없음 / n RPM / 0 RPM(정지) |
+| 10 | `TST-BTN-MONALL` | 모두 모니터링 | 버튼 | `TesterApp.btn_all` | 두 모터 모니터링을 함께 시작/중지 |
+| 11 | `TST-LOG` | 로그 창 | 글자 목록 | `TesterApp.txt` | 모든 동작·결과. 경고 주황, 오류 빨강 |
+
+- 메시지: `TST-MSG-SET` "모터 ID n 를 r RPM 으로 운전합니다. 계속할까요?" / `TST-MSG-MODE` (경고) 제어모드(h4) 변경 안내 / `TST-MSG-STOP` / `TST-MSG-RESTORE` / `TST-MSG-EXIT` "시험기를 종료할까요? 모터는 마지막으로 지정한 상태로 계속 운전합니다."
+- 통신: 연결 1개를 작업 쓰레드 하나가 순서대로 사용(요청 간격 0.1초, 응답 대기 2초). 끊기면 다음 요청 때 다시 접속.
+- h4(영구저장) 쓰기는 실행 1회당 모터별 3번까지만 시도(`MODE_WRITE_MAX_TRIES`).
+- i15(전류)를 지원하지 않는 펌웨어면 i14 만 읽습니다. i12 를 읽지 못하면 '-' 로 표시합니다.
+- 로그: `logs/ecblue_tester_YYYYMMDD.log` (모든 동작), `logs/ecblue_monitor_YYYYMMDD.csv` (시각, ID, 응답, 실제RPM, 전류A, h1, h2, h4, 오류i12, 유지목표RPM).
+- 종료(X): 모터 설정은 바꾸지 않습니다.
 
 ---
 
@@ -447,6 +481,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 | `run.py` | 실행 시작점 | – |
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창), `--monitoring` 옵션 | `Application`, `MainWindow_Loaded` |
 | `run_monitoring.bat` | 모니터링 모드로 실행 (exe 가 있으면 exe, 없으면 python) | – |
+| `tools/ecblue_tester.py`, `ecblue_tester.bat` | `SCR-TESTER` 기존모터 시험기 (3.6절) | – |
 | `tools/ecblue_check.py` | 기존모터제어(ECblue) 현장 점검: 1단계 읽기 전용(h1~h4, i14), 2단계 `--rpm` 지정 시 `HouseLine._ctrl_job` 으로 실제 제어 시험 → 판정 → 시험 전 h1/h2/h4 복원. 임시 설정 파일 사용(운영 Config.dll 미접촉), 결과 `logs/ecblue_check_*.txt`. `--ids` 범위(170-190)·9개 이상이면 i14 만 읽어 응답 ID 찾기, `--timeout`, 응답 없을 때 받은 원시 데이터 표시 | – |
 | `update.bat` | 로컬 폴더를 GitHub `main` 최신 내용으로 업데이트 (`git pull --ff-only`, Config.dll·logs 유지) | – |
 | `motor_monitor/constants.py` | 상수(5장) | `M_Variables` |
@@ -485,6 +520,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 |---|---|---|---|
 | 1.0.0 | 2026-10-13 | 구버전 VB.NET 소스를 파이썬으로 이식 (온실 탭, 짝/홀 16라인, Config.ini) | 전체 |
 | 1.1.0 | 2026-10-13 | 한 화면 1~8구역(짝/홀 유지), 신규모터 상태 표시 | – |
+| 2.3.0 | 2026-10-14 | **기존모터 시험기 추가** `SCR-TESTER` (172.27.0.95, ID 180·176 고정): 접속 테스트, 현재 속도, 모니터링(CSV), 속도 지정(제어모드 설정 포함)·유지, 정지, 원래대로, 로그 파일. 시뮬레이터에 i12·i15 추가 (프로그램 동작 변경 없음) | `SCR-TESTER`, `TST-*`, 3.6절 |
 | 2.3.0 | 2026-10-14 | 현장 점검 도구 `tools/ecblue_check.py` 추가 (프로그램 동작 변경 없음) | 10장 |
 | 2.3.0 | 2026-10-14 | **화면에서 모드 전환**: 모드 표시 띠를 항상 표시(제어=초록 / 모니터링=주황, 문구도 변경)하고 오른쪽에 모드 전환 버튼 추가. 확인 후 실행 중에 즉시 전환, 창 제목·구역 버튼 문구 함께 변경. 모니터링 중 사용중지한 모터의 RPM 0 은 제어 모드로 바뀌면 전송 | `MAIN-MODE-BANNER`, `MAIN-MODE-BTN`, `MSG-MAIN-09/10`, `C-MODE-CTRL`, `C-MODE-BTN`, 4.4절 |
 | 2.2.0 | 2026-10-14 | **기존모터제어 추가**: 모터 종류 '기존모터제어'(IP/PORT/ID/운전속도), ECblue h4 제어모드(1회)·h1 Enable·h2 운전속도 쓰기와 i14 실제속도 읽기, 지정 속도 계속 유지, 모니터링 모드에서 쓰기 차단, `[CTRL_MOTOR_CONFIG]` 저장, 모터 창 520×340 | `DLG-MOTOR-RB-CTRL`, `-TXT-CIP/CPORT/SETRPM`, `MSG-MOTOR-11~16`, `P-CTRL-*`, 4.5절, 7.1, 8장 |
