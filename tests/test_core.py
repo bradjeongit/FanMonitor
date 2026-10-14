@@ -484,3 +484,36 @@ def test_ctrl_motor_monitoring_never_writes(tmp_path, fast):
         h.service_stop(join=True)
     finally:
         gw.stop()
+
+
+# ---------------------------------------------------------------- 현장 점검 도구 (tools/ecblue_check.py)
+def test_ecblue_check_tool(fast, capsys):
+    import importlib.util
+    import os
+    spec = importlib.util.spec_from_file_location(
+        "ecblue_check", os.path.join(os.path.dirname(__file__), "..", "tools", "ecblue_check.py"))
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    gw = FakeGateway().start()
+    gw.add_ecblue(180, analog_rpm=640, pin_level=0)       # h4 쓰기 전에 PIN 필요
+    gw.add_ecblue(176, analog_rpm=0)
+    try:
+        args = ["--ip", gw.host, "--port", str(gw.port), "--ids", "180", "176", "--no-log"]
+        # 1단계: 읽기만, 쓰기 0건
+        assert tool.main(args) == 0
+        out = capsys.readouterr().out
+        assert "TCP 접속 성공" in out and "-> 640 RPM" in out and "버스 속도제어 준비: 안 됨" in out
+        assert gw.writes == []
+        before = {u: list(gw.ecb[u]["h"]) for u in (180, 176)}
+        # 2단계: 실제 제어 코드로 500 RPM 운전 -> 판정 -> 복원
+        assert tool.main(args + ["--rpm", "500", "--seconds", "3", "--yes", "--restore", "yes"]) == 0
+        out = capsys.readouterr().out
+        assert "ID 180: 지정 500 / 실제 500 RPM (차이 0) -> 정상" in out
+        assert "ID 176: 지정 500 / 실제 500 RPM (차이 0) -> 정상" in out
+        assert out.count("복원 확인") == 2 and "복원 확인 안 됨" not in out
+        assert any(w[1] == modbus.ECB_H_CONTROLMODE for w in gw.writes)
+        for u in (180, 176):
+            assert gw.ecb[u]["h"][1:5] == before[u][1:5]           # h1~h4 원래대로
+        assert gw.ecb_speed(180) == 640                             # 아날로그 속도로 복귀
+    finally:
+        gw.stop()
