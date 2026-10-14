@@ -25,7 +25,9 @@ DARK_GRAY = "#a9a9a9"           # WPF DarkGray
 GROUP_BORDER = "#d5dfe5"        # WPF GroupBox 기본 테두리
 
 ZONE_TITLE_BG = "#34495e"
-MONITOR_BANNER_BG = "#d35400"   # 모니터링 모드 표시 띠
+MONITOR_BANNER_BG = "#d35400"   # 모드 표시 띠 - 모니터링 모드
+CONTROL_BANNER_BG = "#1e8449"   # 모드 표시 띠 - 제어 모드
+MODE_BUTTON_FG = "#2c3e50"      # 모드 전환 버튼 글자
 
 NET_OK = "#2980b9"              # RGB(41,128,185)
 NET_ERR = "#c0392b"             # RGB(192,57,43)

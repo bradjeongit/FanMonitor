@@ -340,6 +340,48 @@ def test_monitoring_mode_never_writes(tmp_path, fast):
         gw_new.stop()
 
 
+def test_monitoring_mode_switch_at_runtime(tmp_path, fast):
+    """실행 중 모드 전환: 모니터링 -> 제어(쓰기 시작) -> 모니터링(쓰기 즉시 중단)"""
+    gw_old = FakeGateway().start()
+    gw_new = FakeGateway().start()
+    gw_old.add_old(2, 770)
+    gw_new.add_new(1, automanual=1, startstop=1, rpm=100)
+    gw_new.add_new(5, automanual=1, startstop=1, rpm=600)
+    try:
+        plant = Plant(str(tmp_path / "Config.dll"), monitoring=True)
+        plant.load()
+        code = "H1R1"
+        h = plant.houses[code]
+        h.add_motor(2, MotorType.OLD_MOTOR, True)
+        h.add_motor(1, MotorType.NEW_MOTOR, True)
+        h.add_motor(5, MotorType.NEW_MOTOR, True)
+        plant.configs[code] = plant.configs[code].copy(
+            source_ip=gw_old.host, source_port=gw_old.port, target_ip=gw_new.host, target_port=gw_new.port,
+            source_manual=False, source_line=code, source_id=2)
+        plant.start_line(code)
+        assert _wait(lambda: h.get_motor("1_1").status == MotorStatus.OK)
+        h.mod_motor("1_5", False)                                 # 모니터링 중 사용중지 -> RPM 0 은 보류
+        time.sleep(0.3)
+        assert gw_new.writes == []
+        # 제어 모드로 전환: 다음 주기부터 RPM 쓰기, 보류했던 RPM 0 도 전송
+        plant.set_monitoring(False)
+        assert not plant.monitoring
+        assert _wait(lambda: gw_new.new_regs[1][modbus.NEW_REG_RPM] == 770)
+        assert _wait(lambda: gw_new.new_regs[5][modbus.NEW_REG_RPM] == 0)
+        # 다시 모니터링 모드: 이후 쓰기 0건
+        plant.set_monitoring(True)
+        time.sleep(0.2)
+        n = len(gw_new.writes)
+        gw_new.new_regs[1][modbus.NEW_REG_RPM] = 100              # 제어 모드라면 770 으로 다시 씀
+        time.sleep(0.5)
+        assert len(gw_new.writes) == n and gw_new.new_regs[1][modbus.NEW_REG_RPM] == 100
+        assert list(h._tgt_write_q) == []
+        h.service_stop(join=True)
+    finally:
+        gw_old.stop()
+        gw_new.stop()
+
+
 # ---------------------------------------------------------------- 기존모터제어 (ECblue)
 def test_ecblue_frames_and_mode_bits():
     assert modbus.build_read_holding(1, 2, modbus.ECB_H_CONTROL, 4) == bytes([0, 1, 0, 0, 0, 6, 2, 3, 0, 1, 0, 4])

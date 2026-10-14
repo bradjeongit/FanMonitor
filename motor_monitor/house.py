@@ -8,6 +8,7 @@
 - 기존모터제어(OLD_CTRL): 모터마다 지정한 IP/PORT/ID 의 ECblue 기존 모터에 직접 접속해
   h4(제어모드=버스 절대회전수) → h1(Enable) → h2(지정 운전속도) 순으로 맞추고, i14(실제 회전수)를 읽음
 - 모니터링 모드(plant.monitoring): 읽기만 하고 쓰기(제어) 명령은 만들지도 보내지도 않음
+  (화면에서 실행 중에 바꿀 수 있으며, 매 명령마다 현재 모드를 다시 확인)
 """
 from __future__ import annotations
 
@@ -488,12 +489,12 @@ class HouseLine:
                                 for build in (modbus.build_new_read_page1, modbus.build_new_read):
                                     msg = build(self._next_tgt_idx(), m.id)
                                     self._tgt_read_q.append(_QueueItem(m.key, m.id, msg))
-                            elif m.must_send_zero:
+                            elif m.must_send_zero and not self.monitoring:
                                 # 사용중지된 신규모터는 RPM 0 을 1회 전송
+                                # (모니터링 모드에서는 보류했다가 제어 모드로 바뀌면 전송)
                                 m.must_send_zero = False
-                                if not self.monitoring:
-                                    msg = modbus.build_new_rpm_write(self._next_tgt_idx(), m.id, 0)
-                                    self._enqueue_write(_QueueItem(m.key, m.id, msg))
+                                msg = modbus.build_new_rpm_write(self._next_tgt_idx(), m.id, 0)
+                                self._enqueue_write(_QueueItem(m.key, m.id, msg))
                     if not self._tgt_read_q and self._tgt_write_q:
                         # 사용중인 신규모터가 없어 읽기 명령이 없을 때도 쓰기 명령은 전송
                         # (운영 프로그램은 이 경우 RPM 0 명령이 쌓이기만 하고 전송되지 않음)
@@ -649,8 +650,8 @@ class HouseLine:
     def _ctrl_cycle(self, link: _Channel, m: Motor, stop: threading.Event, tids: dict) -> None:
         key = m.key
         if not m.use:
-            if m.must_send_zero:
-                # 사용 중지로 바꾸면 운전속도 0 을 한 번 보냄 (모니터링 모드에서는 보내지 않음)
+            if m.must_send_zero and not self.monitoring:
+                # 사용 중지로 바꾸면 운전속도 0 을 한 번 보냄 (모니터링 모드에서는 보류했다가 제어 모드로 바뀌면 보냄)
                 with self._lock:
                     cur = self._motors.get(key)
                     if cur is not None:

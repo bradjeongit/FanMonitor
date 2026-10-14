@@ -132,7 +132,7 @@ def main_shot():
     zp = win.zone_panels["H1R1"]
     items = [("1", zp.StopBtn), ("2", zp), ("3", zp.rec_SOURCE_NETSTATUS.master),
              ("4", zp.rec_TARGET_NETSTATUS.master), ("5", zp.rec_SID_NETSTATUS.master),
-             ("6", zp.Btn_Settings), ("7", zp.Btn_Add), ("8", zp.LV.header), ("9", zp.LV.canvas)]
+             ("6", zp.Btn_Settings), ("7", zp.Btn_Add), ("8", zp.LV.header), ("9", zp.LV.canvas), ("10", win.BtnMode)]
     MARKS["main_running"] = [(n, bbox(w)) for n, w in items]
     root.after(100, line_dialog)
 
