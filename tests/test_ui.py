@@ -189,3 +189,41 @@ def test_monitoring_mode_screen(root, tmp_path, monkeypatch):
     assert zp.StartBtn.text == "2구역 모니터링 시작" and zp.StopBtn.text == "2구역 모니터링 종료"
     zp.on_start()
     assert asked[-1] == ("모니터링", "2구역 모니터링을 시작하시겠습니까?")
+
+
+def test_ctrl_motor_add_and_modify(ui, plant):
+    win, dialogs, msgs, _ = ui
+    zp = win.zone_panels["H1R2"]
+    plant.configs["H1R2"] = plant.configs["H1R2"].copy(source_ip="172.27.0.84", source_port=502)
+    d = dialogs.MotorDialog(win.root, plant, win.images, "H1R2", "ADD", on_changed=zp.refresh)
+    d.update_idletasks()
+    assert not d.ctrl_rows_visible
+    d.motor_type_var.set(2); d._on_type()
+    assert d.ctrl_rows_visible and not d.limit_row_visible
+    assert d.txtCIP.get() == "172.27.0.84" and d.txtCPORT.get() == "502"     # 기존모터 게이트웨이 기본값
+    assert d.lbl_id_range.cget("text") == "정수(1~247)"
+    d.txtID.insert(0, "248")
+    d.on_save()
+    assert msgs[-1] == ("오류", "모터ID값은 숫자로 1-247범위로 입력하셔야 합니다.")
+    d.txtID.delete(0, "end"); d.txtID.insert(0, "66")
+    d.on_save()
+    assert msgs[-1] == ("오류", "운전속도를 숫자 0~1100범위로 입력해주세요.")       # 운전속도는 꼭 입력
+    d.txtSETRPM.insert(0, "700")
+    d.txtCIP.delete(0, "end"); d.txtCIP.insert(0, "172.27.0")
+    d.on_save()
+    assert msgs[-1] == ("오류", "기존모터제어 접속 IP가 올바른 형식이 아닙니다..")
+    d.txtCIP.delete(0, "end"); d.txtCIP.insert(0, "172.27.0.84")
+    d.on_save()
+    key = "2_66@172.27.0.84:502"
+    m = plant.houses["H1R2"].get_motor(key)
+    assert m.mtype == MotorType.OLD_CTRL and m.set_rpm == 700 and m.use
+    assert [r.key for r in zp.LV.rows] == [key]
+    from motor_monitor.ui.widgets import MotorListView
+    assert MotorListView.type_icon(m)[0] == "oldmotor_ctrl"
+
+    d = dialogs.MotorDialog(win.root, plant, win.images, "H1R2", "MOD", mod_dkey=key, on_changed=zp.refresh)
+    d.update_idletasks()
+    assert d.ctrl_rows_visible and d.txtSETRPM.get() == "700" and str(d.txtCIP.cget("state")) == "readonly"
+    d.txtSETRPM.delete(0, "end"); d.txtSETRPM.insert(0, "550")
+    d.on_save()
+    assert plant.houses["H1R2"].get_motor(key).set_rpm == 550

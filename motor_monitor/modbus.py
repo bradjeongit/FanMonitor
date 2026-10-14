@@ -153,3 +153,65 @@ class FrameSplitter:
 
 def to_hex(data: bytes) -> str:
     return " ".join(f"{b:02X}" for b in data)
+
+
+# ---------------------------------------------------------------- 기존모터제어 (ZIEHL-ABEGG ECblue)
+# 출처: "ECblue MODBUS Description" L-BAL-E076-GB 1517 Index 013 (FW 1.03~14)
+ECB_H_PIN = 0          # h0 PIN 입력 (0010 = PIN 보호 2단계 해제, 약 15분 유지)
+ECB_H_CONTROL = 1      # h1 Control: bit0 Enable
+ECB_H_SPEED = 2        # h2 Speed control: 제어모드 1 이면 절대 회전수(1/min), 휘발성
+ECB_H_COMPARAM = 3     # h3 COM 파라미터 (읽기만)
+ECB_H_CONTROLMODE = 4  # h4 Controlmode: bit[3:0] 속도제어 방식, bit8 Buscon enable (NV, PIN 2단계)
+ECB_I_SPEED = 14       # i14 실제 회전수(1/min) - 기존모터 읽기와 같은 주소
+ECB_PIN_LEVEL2 = 10    # PIN "0010"
+
+ECB_MODE_MASK = 0x000F
+ECB_MODE_ABS_SPEED = 1         # h4 bit[3:0] = 1 : h2 = 절대 회전수
+ECB_BUSCON_ENABLE = 0x0100     # h4 bit8 : h1 bit0 Enable 사용
+ECB_ENABLE_BIT = 0x0001        # h1 bit0
+
+
+def ecb_mode_ok(h4: int) -> bool:
+    """버스 속도제어(h2 절대 회전수) + 버스 Enable 이 켜져 있는지."""
+    return (h4 & ECB_MODE_MASK) == ECB_MODE_ABS_SPEED and bool(h4 & ECB_BUSCON_ENABLE)
+
+
+def ecb_mode_value(h4: int) -> int:
+    """h4 의 다른 비트는 유지하고 속도제어 방식=1, Buscon enable=1 로 바꾼 값."""
+    return (h4 & ~ECB_MODE_MASK & 0xFFFF) | ECB_MODE_ABS_SPEED | ECB_BUSCON_ENABLE
+
+
+def build_read_holding(tid: int, unit_id: int, addr: int, count: int) -> bytes:
+    return _frame(tid, unit_id, struct.pack(">BHH", FC_READ_HOLDING, addr, count))
+
+
+def build_read_input(tid: int, unit_id: int, addr: int, count: int) -> bytes:
+    return _frame(tid, unit_id, struct.pack(">BHH", FC_READ_INPUT, addr, count))
+
+
+@dataclass
+class Response:
+    tid: int
+    unit_id: int
+    fc: int
+    values: List[int]          # 읽기 응답의 레지스터 값 / 쓰기 응답은 [주소, 값]
+    exception: Optional[int] = None
+
+
+def parse_response(frame: bytes) -> Optional[Response]:
+    """일반 응답 해석 (FC03/04 읽기, FC06 쓰기 echo, 예외 응답)."""
+    if len(frame) < 9:
+        return None
+    tid = frame[0] * 256 + frame[1]
+    uid, fc = frame[6], frame[7]
+    if fc & 0x80:
+        return Response(tid, uid, fc & 0x7F, [], exception=frame[8])
+    if fc in (FC_READ_HOLDING, FC_READ_INPUT):
+        n = frame[8]
+        data = frame[9:9 + n]
+        if len(data) != n or n % 2:
+            return None
+        return Response(tid, uid, fc, [data[i] * 256 + data[i + 1] for i in range(0, n, 2)])
+    if fc == FC_WRITE_SINGLE and len(frame) >= 12:
+        return Response(tid, uid, fc, [frame[8] * 256 + frame[9], frame[10] * 256 + frame[11]])
+    return None

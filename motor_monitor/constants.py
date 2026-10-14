@@ -39,6 +39,7 @@ DEFAULT_IP_PREFIX = "192.168.0."
 class MotorType(IntEnum):
     OLD_MOTOR = 0   # 기존 모터 (RPM 을 읽어오는 모터)
     NEW_MOTOR = 1   # 신규 모터 (RPM 을 써넣는 모터)
+    OLD_CTRL = 2    # 기존모터제어 (ECblue 기존 모터를 Modbus 로 직접 속도 지정, 모터마다 IP/PORT/ID)
 
 
 class MotorStatus(IntEnum):
@@ -48,4 +49,11 @@ class MotorStatus(IntEnum):
     READY = 9       # 대기(제어 시작 후 아직 응답 없음)
 
 
-MOTOR_TYPE_NAME = {MotorType.OLD_MOTOR: "기존모터", MotorType.NEW_MOTOR: "신규모터"}
+MOTOR_TYPE_NAME = {MotorType.OLD_MOTOR: "기존모터", MotorType.NEW_MOTOR: "신규모터",
+                   MotorType.OLD_CTRL: "기존모터제어"}
+
+# 기존모터제어(ECblue) 모터 ID(버스 주소) 범위 - ECblue 문서 h3: Bus Address 1~247
+CTRL_ID_MIN = 1
+CTRL_ID_MAX = 247
+# 제어모드(h4, 영구저장 NV - 쓰기 수명 1만 회) 설정 재시도 한도 (프로그램 실행 1회, 모터 1대당)
+CTRL_MODE_WRITE_MAX_TRIES = 3
