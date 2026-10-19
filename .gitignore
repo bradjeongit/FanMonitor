@@ -8,3 +8,5 @@ Config.ini
 *.lock
 Config.dll
 uconfig.dll
+mini_control.json
+mini_control_settings.json

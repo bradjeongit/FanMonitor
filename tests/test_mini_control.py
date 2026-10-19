@@ -212,3 +212,54 @@ def test_ui_recovery_logged_once(M, gw, app):
     assert pump(root, lambda: it.level == M.INFO)
     pump(root, lambda: False, timeout=1.0)                                # 이후 정상 점검 여러 번
     assert _log(a).count("정상으로 돌아옴") == 1 and "점검:" not in _log(a)
+
+
+@pytest.fixture
+def topmost_spy(monkeypatch):
+    """창마다 설정된 -topmost 값을 기록. (X11 가상화면에는 창 관리자가 없어 Tk 가 이 값을 되읽지 못함.
+    Windows 에서는 Tk 가 직접 처리)"""
+    state = {}
+    orig = tk.Wm.wm_attributes
+
+    def spy(self, *args, **kw):
+        if len(args) == 2 and args[0] == "-topmost":
+            state[str(self)] = bool(args[1])
+        elif len(args) == 1 and args[0] == "-topmost":
+            return int(state.get(str(self), False))
+        return orig(self, *args, **kw)
+    monkeypatch.setattr(tk.Wm, "wm_attributes", spy)
+    monkeypatch.setattr(tk.Wm, "attributes", spy)
+    return state
+
+
+def test_ui_topmost_checkbox(M, topmost_spy, gw, tmp_path, monkeypatch):
+    try:
+        root = tk.Tk()
+    except tk.TclError:
+        pytest.skip("디스플레이 없음")
+    root.withdraw()
+    items_file = str(tmp_path / "items.json")
+    a = M.MiniControlApp(root, items_file=items_file)
+    try:
+        assert not a.v_topmost.get() and topmost_spy[str(root)] is False      # 기본: 꺼짐
+        a.chk_topmost.invoke()                                                 # 체크
+        assert topmost_spy[str(root)] is True
+        path = M.settings_path(items_file)
+        assert M.load_settings(path) == {"topmost": True} and "항상 위에 표시" in _log(a)
+        d = M.ItemDialog(root, "항목 추가")                                   # 입력 창도 위에 표시
+        assert topmost_spy.get(str(d)) is True
+        d.destroy()
+        # 다시 실행하면 저장된 설정으로 시작
+        root2 = tk.Toplevel(root)
+        a2 = M.MiniControlApp(root2, items_file=items_file)
+        assert a2.v_topmost.get() and topmost_spy[str(root2)] is True
+        a2.shutdown()
+        root2.destroy()
+        a.chk_topmost.invoke()                                                 # 해제
+        assert topmost_spy[str(root)] is False and M.load_settings(path) == {"topmost": False}
+        d = M.ItemDialog(root, "항목 추가")
+        assert str(d) not in topmost_spy                                       # 해제 상태면 입력 창은 보통
+        d.destroy()
+    finally:
+        a.shutdown()
+        root.destroy()
