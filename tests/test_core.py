@@ -467,6 +467,34 @@ def test_ctrl_motor_mode_write_refused_is_limited(tmp_path, fast):
         gw.stop()
 
 
+def test_ctrl_motor_survives_unexpected_error(tmp_path, fast, monkeypatch, caplog):
+    """처리 중 예상 밖 오류가 나도 로그를 남기고 다음 주기에 계속 제어함."""
+    from motor_monitor.house import HouseLine
+    gw = FakeGateway().start()
+    gw.add_ecblue(2, analog_rpm=0, h4=0x0101)
+    orig = HouseLine._ctrl_cycle
+    calls = {"n": 0}
+
+    def flaky(self, *a, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("test")
+        return orig(self, *a, **kw)
+
+    monkeypatch.setattr(HouseLine, "_ctrl_cycle", flaky)
+    try:
+        plant = Plant(str(tmp_path / "Config.dll"))
+        plant.load()
+        h = plant.houses["H1R1"]
+        h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, set_rpm=600)
+        plant.start_line("H1R1")
+        assert _wait(lambda: gw.ecb_speed(2) == 600)
+        assert calls["n"] >= 2 and "처리 오류" in caplog.text
+        h.service_stop(join=True)
+    finally:
+        gw.stop()
+
+
 def test_ctrl_motor_monitoring_never_writes(tmp_path, fast):
     gw = FakeGateway().start()
     gw.add_ecblue(2, analog_rpm=450, h4=0)

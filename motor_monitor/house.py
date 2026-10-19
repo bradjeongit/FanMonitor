@@ -604,6 +604,13 @@ class HouseLine:
                             link.close()
                             retry_at[ep] = time.monotonic() + C.ERROR_RETRY_DELAY
                             break
+                        except Exception:
+                            # 예상 밖 오류로 이 구역의 기존모터제어가 멈추지 않도록 기록 후 연결을 새로 맺음
+                            # (응답 순서가 어긋났을 수 있어 연결을 정리)
+                            log.exception("[%s][기존모터제어 ID%s %s] 처리 오류", self.code, m.id, m.ip)
+                            link.close()
+                            retry_at[ep] = time.monotonic() + C.ERROR_RETRY_DELAY
+                            break
                 stop.wait(C.CYCLE_INTERVAL)
         finally:
             for link in links.values():
