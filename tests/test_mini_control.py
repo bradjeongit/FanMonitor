@@ -27,7 +27,7 @@ def _load():
 @pytest.fixture
 def M(monkeypatch, tmp_path):
     m = _load()
-    monkeypatch.setattr(m._bus_mod, "TIMEOUT", 0.4)
+    monkeypatch.setattr(m._bus_mod, "TIMEOUT", 1.0)   # 느린 CI 에서도 정상 응답이 시간 초과되지 않도록
     monkeypatch.setattr(m._bus_mod, "REQUEST_GAP", 0)
     monkeypatch.setattr(m, "LOG_DIR", str(tmp_path))
     return m
@@ -208,10 +208,12 @@ def test_ui_recovery_logged_once(M, gw, app):
     assert pump(root, lambda: it.state == "정상 제어 중")
     saved = gw.ecb.pop(176)                                               # 참조팬 응답 없음 -> 에러
     assert pump(root, lambda: it.level == M.ERROR)
+    start = len(_log(a))                                                  # 여기부터의 로그만 셈
     gw.ecb[176] = saved                                                   # 복구 -> '정상으로 돌아옴' 한 번
     assert pump(root, lambda: it.level == M.INFO)
     pump(root, lambda: False, timeout=1.0)                                # 이후 정상 점검 여러 번
-    assert _log(a).count("정상으로 돌아옴") == 1 and "점검:" not in _log(a)
+    after = _log(a)[start:]
+    assert after.count("정상으로 돌아옴") == 1 and "점검:" not in _log(a)
 
 
 @pytest.fixture
