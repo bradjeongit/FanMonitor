@@ -7,7 +7,7 @@
 진행 내용은 아래 로그창과 logs/mini_control_YYYYMMDD.log 에 시간과 함께 남습니다.
 
 실행: MINI_CONTROL.exe 또는 mini_control.bat 더블클릭, 또는 python tools/mini_control.py
-항목 목록은 실행 폴더의 mini_control.json 에 저장됩니다. 운영 Config.dll 은 사용하지 않습니다.
+항목 목록은 실행 폴더의 mini_control.json, 화면 설정(항상 위)은 mini_control_settings.json 에 저장됩니다. 운영 Config.dll 은 사용하지 않습니다.
 """
 from __future__ import annotations
 
@@ -109,6 +109,27 @@ def save_items(path: str, items: List[Item]) -> None:
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump([it.to_json() for it in items], f, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+
+
+def settings_path(items_file: str) -> str:
+    """화면 설정 파일 (항목 파일과 같은 폴더): mini_control.json -> mini_control_settings.json"""
+    return os.path.splitext(items_file)[0] + "_settings.json"
+
+
+def load_settings(path: str) -> dict:
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_settings(path: str, data: dict) -> None:
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
     os.replace(tmp, path)
 
 
@@ -341,6 +362,8 @@ class ItemDialog(tk.Toplevel):
         self._on_mode()
         self._show_rpm()
         (self.e_id if not item else self.e_pct).focus_set()
+        if _is_topmost(master):          # 본 창이 '항상 위' 면 입력 창이 그 뒤로 숨지 않도록
+            self.attributes("-topmost", True)
         self.grab_set()
 
     def _on_mode(self) -> None:
@@ -389,6 +412,13 @@ class ItemDialog(tk.Toplevel):
         self.destroy()
 
 
+def _is_topmost(win) -> bool:
+    try:
+        return bool(int(win.winfo_toplevel().attributes("-topmost")))
+    except (tk.TclError, ValueError):
+        return False
+
+
 def _valid_ip(s: str) -> bool:
     try:
         ipaddress.IPv4Address(s)
@@ -429,6 +459,12 @@ class MiniControlApp:
             ttk.Button(bar, text=text, command=cmd).pack(side="left", padx=2)
         ttk.Label(bar, text=f"점검 주기 {CHECK_INTERVAL_MS // 1000}초 · 100% = {MAX_RPM} RPM",
                   foreground="#555").pack(side="right")
+        self.settings_file = settings_path(self.items_file)
+        self.settings = load_settings(self.settings_file)
+        self.v_topmost = tk.BooleanVar(value=bool(self.settings.get("topmost", False)))
+        self.chk_topmost = ttk.Checkbutton(bar, text="항상 위", variable=self.v_topmost, command=self.on_topmost)
+        self.chk_topmost.pack(side="right", padx=(0, 16))
+        root.attributes("-topmost", self.v_topmost.get())
 
         pw = ttk.PanedWindow(root, orient="vertical")
         pw.pack(fill="both", expand=True, padx=8, pady=(0, 8))
@@ -525,6 +561,16 @@ class MiniControlApp:
             save_items(self.items_file, self.items)
         except OSError as e:
             self.log(ERROR, f"항목 저장 실패 ({self.items_file}): {e}")
+
+    def on_topmost(self) -> None:
+        on = self.v_topmost.get()
+        self.root.attributes("-topmost", on)
+        self.settings["topmost"] = on
+        try:
+            save_settings(self.settings_file, self.settings)
+        except OSError as e:
+            self.log(ERROR, f"화면 설정 저장 실패 ({self.settings_file}): {e}")
+        self.log(INFO, "창을 항상 위에 표시" if on else "창 항상 위 표시 해제")
 
     def _find(self, ip: str, uid: int, skip: Optional[Item] = None) -> Optional[Item]:
         return next((x for x in self.items if x is not skip and (x.ip, x.uid) == (ip, uid)), None)
