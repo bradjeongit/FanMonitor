@@ -1,0 +1,33 @@
+# 미니 제어기 Windows 실행파일 빌드 -> Actions 실행 결과의 Artifacts 에서 MINI_CONTROL 내려받기
+name: Build mini controller exe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/mini_control.py'
+      - 'tools/ecblue_tester.py'
+      - 'motor_monitor/modbus.py'
+      - 'mini_control.spec'
+      - '.github/workflows/build-mini-exe.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install pyinstaller pytest
+      - name: Test
+        run: python -m pytest -q tests/test_mini_control.py tests/test_core.py
+      - name: Build
+        run: python -m PyInstaller --noconfirm mini_control.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MINI_CONTROL
+          path: dist/MINI_CONTROL.exe
+          retention-days: 30
