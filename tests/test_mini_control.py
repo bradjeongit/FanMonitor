@@ -178,7 +178,8 @@ def test_ui_flow(M, gw, app):
     assert pump(root, lambda: gw.ecb_speed(180) == 500 and it.target == 500)
     text = _log(a)
     assert "[에러] [%s ID99]" % gw.host in text                    # 없는 모터 -> 빨간 [에러]
-    assert "적용 완료" in text and "점검:" in text
+    assert "적용 완료" in text and "점검:" not in text                   # 정상 점검 결과는 로그에 없음
+    assert it.checked != "-"                                              # 목록에는 마지막 점검 시각 표시
     first = text.splitlines()[0]
     assert first[:4].isdigit() and first[10] == " " and first[13] == ":"   # 맨 앞 시간
     ranges = a.logbox.tag_ranges("error")
@@ -193,3 +194,21 @@ def test_ui_flow(M, gw, app):
     pump(root, lambda: False, timeout=1.0)
     assert len(gw.writes) == n
     assert os.path.exists(os.path.join(M.LOG_DIR, time.strftime("mini_control_%Y%m%d.log")))
+
+
+def test_ui_recovery_logged_once(M, gw, app):
+    a, root = app
+    gw.add_ecblue(180, analog_rpm=0, h4=0x0101)
+    gw.add_ecblue(176, analog_rpm=600)
+    a.items = [M.Item(gw.host, 180, "ref", 0, gw.host, 176)]
+    a.refresh()
+    a.tree.selection_set("0")
+    a.on_apply()
+    it = a.items[0]
+    assert pump(root, lambda: it.state == "정상 제어 중")
+    saved = gw.ecb.pop(176)                                               # 참조팬 응답 없음 -> 에러
+    assert pump(root, lambda: it.level == M.ERROR)
+    gw.ecb[176] = saved                                                   # 복구 -> '정상으로 돌아옴' 한 번
+    assert pump(root, lambda: it.level == M.INFO)
+    pump(root, lambda: False, timeout=1.0)                                # 이후 정상 점검 여러 번
+    assert _log(a).count("정상으로 돌아옴") == 1 and "점검:" not in _log(a)

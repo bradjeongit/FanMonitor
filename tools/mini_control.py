@@ -36,7 +36,7 @@ DEFAULT_IP = "172.27.0.116"
 PORT = 502
 MAX_RPM = 1100
 ID_MIN, ID_MAX = 1, 247
-CHECK_INTERVAL_MS = 5000          # 정기 점검 주기
+CHECK_INTERVAL_MS = 30000         # 정기 점검 주기 (30초)
 MODE_WRITE_MAX_TRIES = 3          # h4(영구저장) 쓰기 시도 한도 (실행 1회당, 항목별)
 SPEED_TOLERANCE = 30              # 실제 속도가 지정과 이만큼 넘게 차이 나면 '주의' (RPM)
 
@@ -654,9 +654,10 @@ class MiniControlApp:
                 if not first:
                     self.log(WARN, f"점검: 실제 {it.rpm} RPM, 지정 {it.target} RPM (차이 {diff})", it)
             else:
+                # 정상 점검 결과는 목록에만 표시. 에러/주의 상태에서 돌아온 때만 한 번 기록
+                if not first and it.level in (ERROR, WARN):
+                    self.log(INFO, f"정상으로 돌아옴: 실제 {it.rpm} RPM / 지정 {it.target} RPM", it)
                 it.state, it.level = "정상 제어 중", INFO
-                if not first:
-                    self.log(INFO, f"점검: 실제 {it.rpm} RPM / 지정 {it.target} RPM 정상", it)
             if first:
                 self.log(INFO, f"적용 완료: 지정 {it.target} RPM, 현재 실제 {it.rpm} RPM. "
                                f"{CHECK_INTERVAL_MS // 1000}초마다 점검합니다", it)
