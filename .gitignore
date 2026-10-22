@@ -10,3 +10,6 @@ Config.dll
 uconfig.dll
 mini_control.json
 mini_control_settings.json
+log/
+Motor_Config.ini
+motor_scanner.json

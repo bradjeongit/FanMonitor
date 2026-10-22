@@ -484,6 +484,8 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창), `--monitoring` 옵션 | `Application`, `MainWindow_Loaded` |
 | `run_monitoring.bat` | 모니터링 모드로 실행 (exe 가 있으면 exe, 없으면 python) | – |
 | `tools/ecblue_tester.py`, `ecblue_tester.bat`, `ecblue_tester.spec`, `build_tester_exe.bat`, `.github/workflows/build-tester-exe.yml` | `SCR-TESTER` 기존모터 시험기 (3.6절) | – |
+| `tools/motor_tester.py`, `motor_tester.bat`, `motor_tester.spec`, `build_motor_tester_exe.bat`, `.github/workflows/build-motor-tester-exe.yml`, `tests/test_motor_tester.py` | 모터 시험기 SUNINUS MOTOR TEST (`MOTOR_TESTER.exe` 새 구현, 매뉴얼 14장). 운영 프로그램과 별개 | – |
+| `tools/motor_scanner.py`, `motor_scanner.bat`, `motor_scanner.spec`, `build_motor_scanner_exe.bat`, `.github/workflows/build-motor-scanner-exe.yml`, `tests/test_motor_scanner.py` | 모터 스캐너 (매뉴얼 15장). ID 스캔, ECblue 상태·설정, 통신 워치독(h17). 운영 프로그램과 별개 | – |
 | `tools/ecblue_check.py` | 기존모터제어(ECblue) 현장 점검: 1단계 읽기 전용(h1~h4, i14), 2단계 `--rpm` 지정 시 `HouseLine._ctrl_job` 으로 실제 제어 시험 → 판정 → 시험 전 h1/h2/h4 복원. 임시 설정 파일 사용(운영 Config.dll 미접촉), 결과 `logs/ecblue_check_*.txt`. `--ids` 범위(170-190)·9개 이상이면 i14 만 읽어 응답 ID 찾기, `--timeout`, 응답 없을 때 받은 원시 데이터 표시 | – |
 | `update.bat` | 로컬 폴더를 GitHub `main` 최신 내용으로 업데이트 (`git pull --ff-only`, Config.dll·logs 유지) | – |
 | `motor_monitor/constants.py` | 상수(5장) | `M_Variables` |
@@ -520,6 +522,8 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 
 | 버전 | 날짜 | 변경 내용 | 관련 ID |
 |---|---|---|---|
+| 2.3.0 | 2026-10-22 | **모터 스캐너 추가**: IP 의 ID 범위 스캔(기본 1~240), 제품코드로 ECblue 판별, ECblue 상태·설정(최고/최저 속도, Set Intern1~3, Limit, E1 범위) 변경, 통신 워치독(h17) 켜기/끄기/시험. 시뮬레이터 ECblue 레지스터를 제조사 문서 L-BAL-E076-GB 기준으로 확장(h0~h37, i0~i49, PIN 단계, 워치독). 운영 프로그램 동작 변경 없음 | 매뉴얼 15장 |
+| 2.3.0 | 2026-10-22 | **모터 시험기 추가** (`MOTOR_TESTER.exe` VB.NET 을 디컴파일해 같은 화면·통신 순서로 새로 구현): 실행 중 종료·멈춤 원인(쓰레드 예외 처리 누락, 동기 Invoke·무한 로그창, 소켓 미정리, 수동 모드 CPU 100%, 잠금 없는 공유 큐, Thread.Abort) 수정, 감시·프로그램 기록 추가, exe 빌드. 운영 프로그램 동작 변경 없음 | 매뉴얼 14장 |
 | 1.0.0 | 2026-10-13 | 구버전 VB.NET 소스를 파이썬으로 이식 (온실 탭, 짝/홀 16라인, Config.ini) | 전체 |
 | 1.1.0 | 2026-10-13 | 한 화면 1~8구역(짝/홀 유지), 신규모터 상태 표시 | – |
 | 2.3.0 | 2026-10-14 | 빌드 bat 수정: `pyinstaller` 명령 대신 `python -m PyInstaller` 사용(Python Scripts 폴더가 PATH 에 없어도 동작), 실패 시 "BUILD FAILED" 표시 | `build_exe.bat`, `build_tester_exe.bat` |
