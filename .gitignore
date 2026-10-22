@@ -13,3 +13,5 @@ mini_control_settings.json
 log/
 Motor_Config.ini
 motor_scanner.json
+/*.exe
+*.exe.download

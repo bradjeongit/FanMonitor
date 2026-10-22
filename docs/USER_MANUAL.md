@@ -49,7 +49,16 @@
    - `--debug` : 통신 패킷까지 로그에 기록
 
 ### 2.2-1 최신 버전으로 업데이트
-git 으로 받은 프로그램 폴더의 **`update.bat`** 을 더블클릭하면 최신 버전으로 바뀝니다 ("Update complete."). 설정 파일 `Config.dll` 과 로그는 바뀌지 않습니다. 실행 중인 프로그램은 종료 후 다시 실행해야 새 버전이 적용됩니다. exe 로 쓰는 경우 업데이트 후 `build_exe.bat` 으로 다시 만드세요.
+git 으로 받은 프로그램 폴더의 **`update.bat`** 을 더블클릭하면 최신 버전으로 바뀝니다 ("Update complete."). 설정 파일 `Config.dll`, 각 프로그램의 설정 파일과 로그는 바뀌지 않습니다.
+
+`update.bat` 은 두 가지를 합니다.
+1. 프로그램 파일(소스)을 GitHub `main` 의 최신 내용으로 맞춤
+2. 별도 실행파일 4개를 **같은 폴더에 최신으로 내려받아 교체**: `MOTOR_SCANNER.exe`, `MOTOR_TESTER.exe`, `MINI_CONTROL.exe`, `ECBLUE_TESTER.exe`
+   - 내려받는 곳: GitHub Release **`exe-latest`** (https://github.com/bradjeongit/FanMonitor/releases/tag/exe-latest). main 에 반영되면 GitHub Actions 가 시험·빌드 후 자동으로 교체합니다(반영 후 약 5분).
+   - 실행 중인 프로그램은 바꿀 수 없어 `could not replace - close the program...` 이 표시됩니다. 프로그램을 닫고 다시 실행하세요.
+   - 인터넷이 안 되거나 아직 올라오지 않았으면 기존 파일을 그대로 둡니다(`download failed - kept current file`).
+
+운영 프로그램 `BLDC_MOTOR_MONITOR.exe` 는 내려받기 대상이 아닙니다. exe 로 쓰는 경우 업데이트 후 `build_exe.bat` 으로 다시 만드세요.
 
 ### 2.3 실행파일(.exe)로 만들기
 `build_exe.bat` 을 더블클릭하면 `dist\BLDC_MOTOR_MONITOR\BLDC_MOTOR_MONITOR.exe` 가 만들어집니다. 이 폴더째 현장 PC 에 복사하고 `Config.dll` 을 exe 옆에 둡니다.
@@ -313,7 +322,7 @@ python -m motor_monitor.simulator --port 5020 --old 2:770 --new 1,3
 기존(ECblue) 모터 **ID 180, 176** (통신장치 **172.27.0.95:502**) 을 직접 시험하는 작은 별도 프로그램입니다. 대상은 고정되어 있어 입력할 것이 없습니다. 운영 프로그램과 `Config.dll` 은 건드리지 않습니다.
 
 - 실행: **`ECBLUE_TESTER.exe`** 더블클릭 (파이썬 설치 불필요, 파일 하나만 복사해서 사용). 또는 프로그램 폴더의 `ecblue_tester.bat` / `python tools\ecblue_tester.py`
-- exe 받기: GitHub 저장소 → **Actions** → *Build ECblue tester exe* → 최근 실행 → 아래 **Artifacts** 의 `ECBLUE_TESTER` (zip 안에 exe). 직접 만들려면 Windows 에서 `build_tester_exe.bat` → `dist\ECBLUE_TESTER.exe`
+- exe 받기: 프로그램 폴더의 **`update.bat`** 이 최신으로 내려받아 줍니다(2.2-1). 또는 GitHub 저장소 → **Actions** → *Build ECblue tester exe* → 최근 실행 → 아래 **Artifacts** 의 `ECBLUE_TESTER` (zip 안에 exe). 직접 만들려면 Windows 에서 `build_tester_exe.bat` → `dist\ECBLUE_TESTER.exe`
 - exe 로 실행하면 로그는 **exe 옆 `logs` 폴더**에 생깁니다. 시작하자마자 오류가 나면 `logs\ecblue_tester_error.txt` 에 원인이 남습니다.
 - 화면: 620×520 (최소 460×470). 왼쪽이 180번, 오른쪽이 176번 모터입니다.
 
@@ -349,7 +358,7 @@ python -m motor_monitor.simulator --port 5020 --old 2:770 --new 1,3
 ECblue 팬을 **IP·ID 로 골라 속도를 지정**하는 작은 별도 프로그램입니다. 운영 프로그램과 `Config.dll` 은 사용하지 않습니다.
 
 - 실행: **`MINI_CONTROL.exe`** 더블클릭 (파이썬 설치 불필요, 파일 하나). 또는 `mini_control.bat` / `python tools\mini_control.py`
-- exe 받기: GitHub → **Actions** → *Build mini controller exe* → 최근 실행 → **Artifacts** 의 `MINI_CONTROL`. 직접 만들려면 `build_mini_exe.bat` → `dist\MINI_CONTROL.exe`
+- exe 받기: 프로그램 폴더의 **`update.bat`** 이 최신으로 내려받아 줍니다(2.2-1). 또는 GitHub → **Actions** → *Build mini controller exe* → 최근 실행 → **Artifacts** 의 `MINI_CONTROL`. 직접 만들려면 `build_mini_exe.bat` → `dist\MINI_CONTROL.exe`
 - 항목 목록은 exe 옆 `mini_control.json` 에 저장되어 다음 실행 때 다시 나옵니다. 단, **제어는 [적용]을 눌러야 시작**합니다(실행만 해서는 팬에 아무것도 쓰지 않음).
 
 ![미니 제어기](images/mini_control.png) ![항목 추가 창](images/mini_control_dialog.png)
@@ -391,7 +400,7 @@ ECblue 팬을 **IP·ID 로 골라 속도를 지정**하는 작은 별도 프로�
 현장에서 쓰던 `MOTOR_TESTER.exe`(VB.NET)를 파이썬으로 **새로 구현**한 프로그램입니다. 화면과 통신 순서는 원본과 같고, 원본이 실행 중 죽거나 멈추던 원인을 고쳤습니다. 운영 프로그램과 `Config.dll` 은 사용하지 않습니다.
 
 - 실행: **`MOTOR_TESTER.exe`** 더블클릭 (파이썬 설치 불필요, 파일 하나). 또는 `motor_tester.bat` / `python tools\motor_tester.py`
-- exe 받기: GitHub → **Actions** → *Build motor tester exe* → 최근 실행 → **Artifacts** 의 `MOTOR_TESTER`. 직접 만들려면 `build_motor_tester_exe.bat` → `dist\MOTOR_TESTER.exe`
+- exe 받기: 프로그램 폴더의 **`update.bat`** 이 최신으로 내려받아 줍니다(2.2-1). 또는 GitHub → **Actions** → *Build motor tester exe* → 최근 실행 → **Artifacts** 의 `MOTOR_TESTER`. 직접 만들려면 `build_motor_tester_exe.bat` → `dist\MOTOR_TESTER.exe`
 
 ![모터 시험기](images/motor_tester.png)
 
@@ -475,7 +484,7 @@ ECblue 팬을 **IP·ID 로 골라 속도를 지정**하는 작은 별도 프로�
 통신장치(IP)에 연결된 모터의 **ID 를 찾아 목록으로 보여주고**, ECblue 팬은 **상태 확인·설정 변경·통신 끊김 시 자동 운전 켜기/끄기**를 하는 별도 프로그램입니다. 운영 프로그램과 `Config.dll` 은 사용하지 않습니다.
 
 - 실행: **`MOTOR_SCANNER.exe`** 더블클릭 (파이썬 설치 불필요). 또는 `motor_scanner.bat` / `python tools\motor_scanner.py`
-- exe 받기: GitHub → **Actions** → *Build motor scanner exe* → **Artifacts** 의 `MOTOR_SCANNER`. 직접 만들려면 `build_motor_scanner_exe.bat`
+- exe 받기: 프로그램 폴더의 **`update.bat`** 이 최신으로 내려받아 줍니다(2.2-1). 또는 GitHub → **Actions** → *Build motor scanner exe* → **Artifacts** 의 `MOTOR_SCANNER`. 직접 만들려면 `build_motor_scanner_exe.bat`
 - 근거 자료: ZIEHL-ABEGG "ECblue MODBUS Description" L-BAL-E076-GB 1517 Index 013 (ECblue 펌웨어 1.03 ~ 14)
 
 ![모터 스캐너](images/motor_scanner.png)
