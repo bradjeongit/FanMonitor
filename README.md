@@ -19,6 +19,8 @@ ecblue_tester.bat          # 기존모터 시험기 (172.27.0.95, ID 180·176 �
 mini_control.bat           # 미니 제어기: IP·ID 로 팬 추가, 속도 % 또는 참조팬 지정 - 매뉴얼 13장
 motor_tester.bat           # 모터 시험기(SUNINUS MOTOR TEST, MOTOR_TESTER.exe 새 구현) - 매뉴얼 14장
 build_motor_tester_exe.bat # 모터 시험기 실행파일 dist\MOTOR_TESTER.exe 만들기 (GitHub Actions 에서도 자동 빌드)
+motor_scanner.bat          # 모터 스캐너: IP 의 모터 ID 찾기, ECblue 설정·통신 끊김 시 자동 운전 - 매뉴얼 15장
+build_motor_scanner_exe.bat # 모터 스캐너 실행파일 dist\MOTOR_SCANNER.exe 만들기 (GitHub Actions 에서도 자동 빌드)
 build_mini_exe.bat         # 미니 제어기 실행파일 dist\MINI_CONTROL.exe 만들기 (GitHub Actions 에서도 자동 빌드)
 build_tester_exe.bat       # 시험기 실행파일 dist\ECBLUE_TESTER.exe 만들기 (GitHub Actions 에서도 자동 빌드)
 build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
