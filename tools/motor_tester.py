@@ -330,7 +330,9 @@ class Tester:
         self.source_rpm: Optional[int] = None
         self.source_time: Optional[datetime.datetime] = None
         self.motors: Dict[int, MotorStatus] = {i: MotorStatus(i) for i in settings.motor_ids()}
-        self._writes: "collections.OrderedDict[Tuple[int, int], Tuple[int, str]]" = collections.OrderedDict()
+        self._writes: "collections.OrderedDict[Tuple[int, int], Tuple[int, str, int]]" = collections.OrderedDict()
+        self._last_write: Optional[Tuple[int, int]] = None   # 방금 보낸 쓰기 (모터, 레지스터)
+        self._last_write_rejected = False                    # 그 쓰기에 예외 응답이 왔는지
         self._src = Link(settings.src_ip, settings.src_port)
         self._tgt = Link(settings.tgt_ip, settings.tgt_port)
         self._threads: Dict[str, threading.Thread] = {}
@@ -498,6 +500,7 @@ class Tester:
             beat()
             self._target_go.wait(RECV_POLL)
         ids = list(self.motors)
+        pos = 0   # 다음에 읽을 모터. 오류로 다시 접속해도 처음부터가 아니라 이어서 진행 (뒤쪽 모터가 굶지 않도록)
         while not self._stop.is_set():
             beat()
             try:
@@ -505,46 +508,53 @@ class Tester:
                     if not self._connect(link, "TARGET"):
                         continue
                     with self._lock:
-                        self._writes.clear()   # 원본: 접속하면 쓰기 대기열 비움
-                for uid in ids:
-                    if self._stop.is_set():
-                        break
-                    self._flush_writes(link, beat)
+                        self._writes.clear()   # 원본: 접속하면 쓰기 대기열 비움 (해당 모터를 다시 읽어 다시 만듦)
+                while pos < len(ids) and not self._stop.is_set():
+                    uid = ids[pos]
                     frame = modbus.build_new_read(link.next_tid(), uid)
                     with self._lock:
                         self.motors[uid].reply = False
                     self._emit("TARGET", f"[ID:{uid:02d}][S]{modbus.to_hex(frame)} (읽기요청)")
                     link.send(frame)
                     link.receive(TARGET_READ_GAP, self._on_target_frame, self._stop, beat)
-                self._flush_writes(link, beat)
+                    self._flush_writes(link, beat)   # 이 모터의 쓰기를 끝낸 뒤 다음 모터로
+                    pos += 1
                 if self._stop.is_set():
                     break
+                pos = 0
                 for uid in ids:
                     if not self.motors[uid].reply:
                         self._emit("TARGET", f"[ID:{uid:02d}][E]응답없음")
                 link.receive(TARGET_PAUSE, self._on_target_frame, self._stop, beat)
+                self._flush_writes(link, beat)       # 쉬는 동안 늦게 온 읽기 응답의 쓰기
             except Exception as e:
                 if self._stop.is_set():
                     break
                 self._on_error(link, "TARGET", e)
         link.close()
 
-    def _queue_write(self, uid: int, reg: int, value: int, comment: str) -> None:
+    def _queue_write(self, uid: int, reg: int, value: int, comment: str, attempt: int = 0) -> None:
         with self._lock:
-            self._writes[(uid, reg)] = (value, comment)   # 같은 레지스터는 최신 값 하나만
+            self._writes[(uid, reg)] = (value, comment, attempt)   # 같은 레지스터는 최신 값 하나만
 
     def _flush_writes(self, link: Link, beat: Callable[[], None]) -> None:
         while not self._stop.is_set():
             with self._lock:
                 if not self._writes:
                     return
-                (uid, reg), (value, comment) = self._writes.popitem(last=False)
+                (uid, reg), (value, comment, attempt) = self._writes.popitem(last=False)
             if uid not in self.motors:
                 continue
             frame = modbus.build_new_write_single(link.next_tid(), uid, reg, value)
-            self._emit("TARGET", f"[ID:{uid:02d}][S]{modbus.to_hex(frame)} ({comment})")
+            self._last_write, self._last_write_rejected = (uid, reg), False
+            self._emit("TARGET", f"[ID:{uid:02d}][S]{modbus.to_hex(frame)} ({comment}"
+                                 + (", 재시도)" if attempt else ")"))
             link.send(frame)
             link.receive(TARGET_WRITE_GAP, self._on_target_frame, self._stop, beat)
+            with self._lock:
+                retry = self._last_write_rejected and attempt == 0 and (uid, reg) not in self._writes
+            if retry:   # 장치가 바쁨 등으로 거절하면 다음 바퀴(약 10초 뒤)까지 기다리지 않고 1번 다시 보냄
+                self._queue_write(uid, reg, value, comment, attempt=1)
 
     def _on_target_frame(self, f: bytes) -> None:
         r = modbus.parse_new_response(f)
@@ -573,6 +583,9 @@ class Tester:
                     self.motors[g.unit_id].reply = True
             self._emit("TARGET", f"[ID:{g.unit_id:02d}][R]{modbus.to_hex(f)} (쓰기성공)")
         elif g is not None and g.exception is not None:
+            # 예외 응답에는 레지스터 주소가 없으므로 방금 보낸 쓰기(같은 모터)에 대한 거절로 봄
+            if g.fc == modbus.FC_WRITE_SINGLE and self._last_write and self._last_write[0] == g.unit_id:
+                self._last_write_rejected = True
             self._emit("TARGET", f"[ID:{g.unit_id:02d}][R]{modbus.to_hex(f)} (예외응답:{g.exception})")
         else:
             self._emit("TARGET", f"[R]{modbus.to_hex(f)}")

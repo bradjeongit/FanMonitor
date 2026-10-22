@@ -550,10 +550,10 @@ def test_speed_changes_with_hostile_write_responses(M):
     src = FakeGateway().start()
     src.add_old(1, 500)
     tgt = WriteHostileGateway().start()
-    tgt.add_new(2)
-    tgt.add_new(3)
+    for u in (2, 3, 4):
+        tgt.add_new(u)
     out = Lines()
-    s = M.Settings(src_ip=src.host, src_port=src.port, tgt_ip=tgt.host, tgt_port=tgt.port, tgt_ids=[2, 3, 0, 0, 0])
+    s = M.Settings(src_ip=src.host, src_port=src.port, tgt_ip=tgt.host, tgt_port=tgt.port, tgt_ids=[2, 3, 4, 0, 0])
     t = M.Tester(s, out)
     t.start()
     try:
@@ -565,7 +565,9 @@ def test_speed_changes_with_hostile_write_responses(M):
             time.sleep(0.5)
             assert all(th.is_alive() for th in t._threads.values())
         src.add_old(1, 640)
-        assert wait_for(lambda: all(tgt.new_regs[u][modbus.NEW_REG_RPM] == 640 for u in (2, 3)), timeout=20)
+        # 오류가 반복돼도 뒤쪽 모터(4번)까지 차례가 돌아와야 함 (재접속 후 첫 모터부터 다시 시작하면 굶음)
+        assert wait_for(lambda: all(tgt.new_regs[u][modbus.NEW_REG_RPM] == 640 for u in (2, 3, 4)), timeout=20), \
+            {u: tgt.new_regs[u][modbus.NEW_REG_RPM] for u in (2, 3, 4)}
     finally:
         assert t.stop()
         src.stop()
@@ -573,6 +575,95 @@ def test_speed_changes_with_hostile_write_responses(M):
     assert t.restarts == 0 and t.errors == 0
     assert "[E]통신 끊김" in out.text("TARGET") and "(예외응답:4)" in out.text("TARGET")
     assert "[E]" not in out.text("SOURCE")            # 신규모터 문제가 기존모터 통신에 영향 없음
+
+
+class DropSecondWriteGateway(FakeGateway):
+    """연결마다 두 번째 쓰기를 받으면 연결을 끊는 통신장치 (쓰기는 반영 안 됨)"""
+
+    def __init__(self):
+        super().__init__()
+        self._local = threading.local()        # 연결(접속 처리 쓰레드)마다 쓰기 횟수
+
+    def _client_loop(self, c):
+        self._local.writes = 0
+        try:
+            super()._client_loop(c)
+        except ConnectionAbortedError:
+            pass
+        finally:
+            try:
+                c.close()
+            except OSError:
+                pass
+
+    def handle(self, req):
+        if len(req) >= 8 and req[7] == modbus.FC_WRITE_SINGLE:
+            self._local.writes += 1
+            if self._local.writes == 2:
+                raise ConnectionAbortedError("시험: 두 번째 쓰기에서 끊음")
+        return super().handle(req)
+
+
+def test_errors_every_cycle_do_not_starve_later_motors(M):
+    """오류로 다시 접속할 때마다 첫 모터부터 다시 하면, 오류가 매번 나는 경우 뒤쪽 모터는 영영 차례가 오지 않음.
+    다시 접속해도 멈춘 모터부터 이어서 해야 모든 모터에 속도가 써짐."""
+    g = DropSecondWriteGateway().start()
+    for u in (2, 3, 4):
+        g.add_new(u, automanual=1, startstop=1, rpm=0)
+    t = M.Tester(M.Settings(manual=True, src_rpm=100, tgt_ip=g.host, tgt_port=g.port, tgt_ids=[2, 3, 4, 0, 0]), Lines())
+    stop = threading.Event()
+
+    def changer():                                   # 속도를 계속 바꿈 -> 매 바퀴 모든 모터에 쓰기 발생
+        v = 100
+        while not stop.is_set():
+            v = 100 + (v + 7) % 700
+            t.set_rpm(v)
+            time.sleep(0.02)
+
+    th = threading.Thread(target=changer, daemon=True)
+    t.start()
+    th.start()
+    try:
+        assert wait_for(lambda: {u for u, reg, _ in list(g.writes) if reg == modbus.NEW_REG_RPM} >= {2, 3, 4}, timeout=15), \
+            sorted({u for u, reg, _ in g.writes})
+    finally:
+        stop.set()
+        th.join()
+        t.stop()
+        g.stop()
+
+
+class BusyFirstWriteGateway(FakeGateway):
+    """쓰기를 번갈아 '장치 사용 중'(예외 6)으로 거절하는 통신장치"""
+
+    def __init__(self):
+        super().__init__()
+        self.rejects = 0
+        self._flip = False
+
+    def handle(self, req):
+        if len(req) >= 8 and req[7] == modbus.FC_WRITE_SINGLE:
+            self._flip = not self._flip
+            if self._flip:
+                self.rejects += 1
+                return req[0:2] + struct.pack(">HHBBB", 0, 3, req[6], 0x86, 6)
+        return super().handle(req)
+
+
+def test_rejected_write_is_retried_once(M, monkeypatch):
+    """속도 쓰기가 거절되면 다음 바퀴까지 기다리지 않고 바로 1번 다시 보냄"""
+    monkeypatch.setattr(M, "TARGET_PAUSE", 30.0)     # 다음 바퀴가 오기 전에 반영돼야 함
+    g = BusyFirstWriteGateway().start()
+    g.add_new(2, automanual=1, startstop=1, rpm=0)
+    out = Lines()
+    t = M.Tester(M.Settings(manual=True, src_rpm=450, tgt_ip=g.host, tgt_port=g.port, tgt_ids=[2, 0, 0, 0, 0]), out)
+    t.start()
+    try:
+        assert wait_for(lambda: g.new_regs[2][modbus.NEW_REG_RPM] == 450, timeout=5)
+    finally:
+        t.stop()
+        g.stop()
+    assert g.rejects == 1 and "(쓰기요청-회전수:450, 재시도)" in out.text("TARGET")
 
 
 # ---------------------------------------------------------------- 화면
