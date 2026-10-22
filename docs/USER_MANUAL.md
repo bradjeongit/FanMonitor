@@ -53,15 +53,17 @@ git 으로 받은 프로그램 폴더의 **`update.bat`** 을 더블클릭하면
 
 `update.bat` 은 두 가지를 합니다.
 1. 프로그램 파일(소스)을 GitHub `main` 의 최신 내용으로 맞춤
-2. 별도 실행파일 4개를 **같은 폴더에 최신으로 내려받아 교체**: `MOTOR_SCANNER.exe`, `MOTOR_TESTER.exe`, `MINI_CONTROL.exe`, `ECBLUE_TESTER.exe`
+2. 실행파일 5개를 **같은 폴더에 최신으로 내려받아 교체**: 운영 프로그램 `BLDC_MOTOR_MONITOR.exe`, `MOTOR_SCANNER.exe`, `MOTOR_TESTER.exe`, `MINI_CONTROL.exe`, `ECBLUE_TESTER.exe`
    - 내려받는 곳: GitHub Release **`exe-latest`** (https://github.com/bradjeongit/FanMonitor/releases/tag/exe-latest). main 에 반영되면 GitHub Actions 가 시험·빌드 후 자동으로 교체합니다(반영 후 약 5분).
    - 실행 중인 프로그램은 바꿀 수 없어 `could not replace - close the program...` 이 표시됩니다. 프로그램을 닫고 다시 실행하세요.
    - 인터넷이 안 되거나 아직 올라오지 않았으면 기존 파일을 그대로 둡니다(`download failed - kept current file`).
 
-운영 프로그램 `BLDC_MOTOR_MONITOR.exe` 는 내려받기 대상이 아닙니다. exe 로 쓰는 경우 업데이트 후 `build_exe.bat` 으로 다시 만드세요.
+운영 프로그램 `BLDC_MOTOR_MONITOR.exe` 는 **파일 하나**로 받습니다. 프로그램 폴더 맨 위에 놓이므로 `python run.py` 와 같은 `Config.dll` 과 `logs` 폴더를 씁니다(설정 파일은 exe 와 같은 폴더에서 찾음). 다른 폴더에서 운영 중인 exe 는 자동으로 바뀌지 않으니, 그 폴더로 옮겨 쓰거나 이 폴더의 exe 로 운영하세요. 파일 하나짜리라 처음 뜰 때 몇 초 걸릴 수 있습니다.
 
 ### 2.3 실행파일(.exe)로 만들기
-`build_exe.bat` 을 더블클릭하면 `dist\BLDC_MOTOR_MONITOR\BLDC_MOTOR_MONITOR.exe` 가 만들어집니다. 이 폴더째 현장 PC 에 복사하고 `Config.dll` 을 exe 옆에 둡니다.
+가장 쉬운 방법은 `update.bat` 으로 최신 `BLDC_MOTOR_MONITOR.exe`(파일 하나)를 받는 것입니다(2.2-1). GitHub Actions 가 시험 후 만들어 Release `exe-latest` 에 올립니다.
+
+직접 만들려면 `build_exe.bat` 을 더블클릭하면 `dist\BLDC_MOTOR_MONITOR\BLDC_MOTOR_MONITOR.exe`(폴더형)가 만들어집니다. 이 폴더째 현장 PC 에 복사하고 `Config.dll` 을 exe 옆에 둡니다. 파일 하나로 만들려면 `python -m PyInstaller motor_monitor_onefile.spec` → `dist\BLDC_MOTOR_MONITOR.exe`.
 
 ### 2.4 모니터링 모드 (시험용, 제어 신호 보내지 않음)
 운영 프로그램이 모터를 제어하는 동안 이 프로그램을 시험할 때 사용합니다. 모터 상태를 **읽기만** 하고, 신규모터에 수동·동작·RPM 설정 신호를 **보내지 않으므로** 운영 프로그램의 제어와 겹치지 않습니다.

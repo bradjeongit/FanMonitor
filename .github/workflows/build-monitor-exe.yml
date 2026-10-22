@@ -1,0 +1,58 @@
+# 운영 프로그램(BLDC MOTOR MONITOR) Windows 실행파일(파일 하나) 빌드 -> Release 'exe-latest' 와 Artifacts 의 BLDC_MOTOR_MONITOR
+name: Build motor monitor exe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'run.py'
+      - 'motor_monitor/**'
+      - 'motor_monitor_onefile.spec'
+      - 'tests/test_core.py'
+      - 'tests/test_ui.py'
+      - '.github/workflows/build-monitor-exe.yml'
+
+# exe 를 Release 'exe-latest' 에 올리기 위한 권한 (update.bat 이 로그인 없이 여기서 내려받음)
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install pyinstaller pytest
+      - name: Test
+        run: python -m pytest -q tests/test_core.py tests/test_ui.py
+      - name: Build
+        run: python -m PyInstaller --noconfirm motor_monitor_onefile.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLDC_MOTOR_MONITOR
+          path: dist/BLDC_MOTOR_MONITOR.exe
+          retention-days: 30
+      - name: Publish to release exe-latest (update.bat downloads from here)
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "${{ github.repository }}"
+          gh release view exe-latest --repo $repo *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create exe-latest --repo $repo --target main --title "최신 실행파일 (update.bat 용)" `
+              --notes "main 에 반영될 때마다 GitHub Actions 가 실행파일을 자동으로 교체합니다. 프로그램 폴더의 update.bat 이 여기서 내려받습니다."
+            if ($LASTEXITCODE -ne 0) {
+              # 다른 빌드가 동시에 만들었을 수 있음
+              Start-Sleep -Seconds 5
+              gh release view exe-latest --repo $repo *> $null
+              if ($LASTEXITCODE -ne 0) { exit 1 }
+            }
+          }
+          gh release upload exe-latest dist/BLDC_MOTOR_MONITOR.exe --repo $repo --clobber
+          if ($LASTEXITCODE -ne 0) { exit 1 }

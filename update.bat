@@ -16,7 +16,7 @@ if errorlevel 1 (
 
 echo.
 echo [2/2] Downloading latest executables...
-for %%E in (MOTOR_SCANNER MOTOR_TESTER MINI_CONTROL ECBLUE_TESTER) do call :getexe %%E
+for %%E in (BLDC_MOTOR_MONITOR MOTOR_SCANNER MOTOR_TESTER MINI_CONTROL ECBLUE_TESTER) do call :getexe %%E
 
 echo.
 if "%FAIL%"=="0" goto ok
