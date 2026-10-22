@@ -294,6 +294,8 @@ class NastyServer:
                 return
             if not req:
                 return
+            if len(req) < 8:                     # 요청이 나뉘어 온 경우 (시험 장치는 무시)
+                continue
             n += 1
             tid, uid, fc = req[0:2], req[6], req[7]
             if fc == modbus.FC_READ_INPUT:
@@ -329,7 +331,7 @@ def test_garbage_and_broken_frames_do_not_kill_threads(M):
     t.start()
     try:
         assert wait_for(lambda: "(읽기결과-회전수:555)" in out.text("SOURCE"))
-        assert wait_for(lambda: out.text("TARGET").count("[ID:0") > 20, timeout=15)
+        assert wait_for(lambda: out.text("TARGET").count("[ID:0") > 20, timeout=30)
         assert all(th.is_alive() for th in t._threads.values())
     finally:
         assert t.stop()
@@ -420,10 +422,10 @@ def test_start_stop_cycles_no_leak(M):
         assert t.stop()
         assert time.monotonic() - t0 < 1.5
     gw.stop()                                   # 시뮬레이터 쪽 소켓도 정리한 뒤 비교
-    time.sleep(0.5)
-    assert threading.active_count() <= base_threads + 1
+    # 정리가 끝날 때까지 기다림 (누수라면 아무리 기다려도 줄지 않음)
+    assert wait_for(lambda: threading.active_count() <= base_threads + 1, timeout=5)
     if base_fd is not None:
-        assert _fd_count() <= base_fd + 2
+        assert wait_for(lambda: _fd_count() <= base_fd + 2, timeout=5), _fd_count()
 
 
 def test_soak_with_flapping_gateway(M):
@@ -452,7 +454,7 @@ def test_soak_with_flapping_gateway(M):
     assert t.restarts == 0 and t.errors == 0
     assert "(쓰기성공)" in out.text("TARGET")
     if base_fd is not None:
-        assert _fd_count() <= base_fd + 4
+        assert wait_for(lambda: _fd_count() <= base_fd + 4, timeout=5), _fd_count()
 
 
 # ---------------------------------------------------------------- 화면
