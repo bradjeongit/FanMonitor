@@ -11,6 +11,10 @@ on:
       - 'ecblue_tester.spec'
       - '.github/workflows/build-tester-exe.yml'
 
+# exe 를 Release 'exe-latest' 에 올리기 위한 권한 (update.bat 이 로그인 없이 여기서 내려받음)
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -30,3 +34,23 @@ jobs:
           name: ECBLUE_TESTER
           path: dist/ECBLUE_TESTER.exe
           retention-days: 30
+      - name: Publish to release exe-latest (update.bat downloads from here)
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "${{ github.repository }}"
+          gh release view exe-latest --repo $repo *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create exe-latest --repo $repo --target main --title "최신 실행파일 (update.bat 용)" `
+              --notes "main 에 반영될 때마다 GitHub Actions 가 실행파일을 자동으로 교체합니다. 프로그램 폴더의 update.bat 이 여기서 내려받습니다."
+            if ($LASTEXITCODE -ne 0) {
+              # 다른 빌드가 동시에 만들었을 수 있음
+              Start-Sleep -Seconds 5
+              gh release view exe-latest --repo $repo *> $null
+              if ($LASTEXITCODE -ne 0) { exit 1 }
+            }
+          }
+          gh release upload exe-latest dist/ECBLUE_TESTER.exe --repo $repo --clobber
+          if ($LASTEXITCODE -ne 0) { exit 1 }

@@ -29,8 +29,10 @@ build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
 `Config.dll` 은 현장 정보가 들어 있어 저장소에 올리지 않습니다(.gitignore).
 
 ## 최신 버전으로 업데이트
-git 으로 받은 폴더에서 `update.bat` 을 더블클릭하면 GitHub `main` 의 최신 내용으로 바뀝니다.
-`Config.dll` 과 `logs/` 는 git 관리 대상이 아니라 업데이트해도 그대로 유지됩니다.
+git 으로 받은 폴더에서 `update.bat` 을 더블클릭하면 GitHub `main` 의 최신 내용으로 바뀌고,
+별도 실행파일(`MOTOR_SCANNER.exe`, `MOTOR_TESTER.exe`, `MINI_CONTROL.exe`, `ECBLUE_TESTER.exe`)도 같은 폴더에 최신으로 내려받습니다
+(GitHub Release `exe-latest`, main 반영 시 Actions 가 자동 교체).
+`Config.dll`, 설정 파일, `logs/` 는 git 관리 대상이 아니라 업데이트해도 그대로 유지됩니다.
 
 ## 시험
 ```
