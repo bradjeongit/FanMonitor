@@ -457,6 +457,124 @@ def test_soak_with_flapping_gateway(M):
         assert wait_for(lambda: _fd_count() <= base_fd + 4, timeout=5), _fd_count()
 
 
+# ---------------------------------------------------------------- 속도를 계속 바꿀 때 (현장 다운 상황)
+def test_auto_mode_rapid_source_rpm_changes(M, gw):
+    """기존모터 회전수가 계속 바뀌어도 쓰기가 밀리지 않고, 마지막 값으로 맞춰지며, 오류·재시작 없음"""
+    gw.add_old(1, 500)
+    for u in (2, 3, 4):
+        gw.add_new(u)
+    out = Lines()
+    t = M.Tester(_settings(M, gw, tgt_ids=[2, 3, 4, 0, 0]), out)
+    t.start()
+    try:
+        end = time.monotonic() + 6
+        rpm = 100
+        while time.monotonic() < end:
+            rpm = 100 + (rpm + 137) % 700
+            gw.add_old(1, rpm)
+            time.sleep(0.15)
+            assert len(t._writes) <= 3 * 3          # 대기 중인 쓰기는 모터×레지스터 수를 넘지 않음
+        assert wait_for(lambda: all(gw.new_regs[u][modbus.NEW_REG_RPM] == rpm for u in (2, 3, 4)))
+        assert all(th.is_alive() for th in t._threads.values())
+    finally:
+        assert t.stop()
+    assert t.restarts == 0 and t.errors == 0
+    assert "[E]" not in out.text("TARGET")
+
+
+def test_manual_mode_apply_hammered(M, gw):
+    """[적용]을 아주 빠르게 계속 눌러도(다른 쓰레드에서 값 변경) 마지막 값이 반영되고 오류 없음"""
+    for u in (2, 3):
+        gw.add_new(u)
+    out = Lines()
+    t = M.Tester(_settings(M, gw, manual=True, src_rpm=400, tgt_ids=[2, 3, 0, 0, 0]), out)
+    t.start()
+    stop = threading.Event()
+    last = {"v": 400}
+
+    def clicker():
+        v = 0
+        while not stop.is_set():
+            v = (v + 37) % 801
+            t.set_rpm(v)
+            last["v"] = v
+            time.sleep(0.002)
+
+    th = threading.Thread(target=clicker, daemon=True)
+    th.start()
+    try:
+        time.sleep(5)
+        stop.set()
+        th.join()
+        assert wait_for(lambda: all(gw.new_regs[u][modbus.NEW_REG_RPM] == last["v"] for u in (2, 3)))
+    finally:
+        assert t.stop()
+    assert t.restarts == 0 and t.errors == 0
+
+
+class WriteHostileGateway(FakeGateway):
+    """쓰기를 받으면 가끔 연결을 끊거나, 늦게 답하거나, 예외로 답하는 통신장치"""
+
+    def __init__(self):
+        super().__init__()
+        self.n = 0
+
+    def handle(self, req):
+        if len(req) >= 8 and req[7] == modbus.FC_WRITE_SINGLE:
+            self.n += 1
+            k = self.n % 4
+            if k == 1:
+                raise ConnectionAbortedError("시험: 쓰기 중 끊음")
+            if k == 2:
+                time.sleep(0.4)                      # 다음 요청 시간까지 늦게 답함
+            if k == 3:
+                tid, uid = req[0:2], req[6]
+                return tid + struct.pack(">HHBBB", 0, 3, uid, 0x86, 4)   # 장치 오류 예외
+        return super().handle(req)
+
+    def _client_loop(self, c):
+        try:
+            super()._client_loop(c)
+        except ConnectionAbortedError:
+            pass
+        finally:
+            try:
+                c.close()
+            except OSError:
+                pass
+
+
+def test_speed_changes_with_hostile_write_responses(M):
+    """속도 변경(쓰기) 때 통신장치가 끊거나 늦거나 예외로 답해도 프로그램은 계속 동작하고,
+    신규모터 쪽 문제로 기존모터 연결이 끊기지 않음 (원본: 신규모터 오류 때 기존모터 연결을 닫음)"""
+    src = FakeGateway().start()
+    src.add_old(1, 500)
+    tgt = WriteHostileGateway().start()
+    tgt.add_new(2)
+    tgt.add_new(3)
+    out = Lines()
+    s = M.Settings(src_ip=src.host, src_port=src.port, tgt_ip=tgt.host, tgt_port=tgt.port, tgt_ids=[2, 3, 0, 0, 0])
+    t = M.Tester(s, out)
+    t.start()
+    try:
+        end = time.monotonic() + 8
+        rpm = 500
+        while time.monotonic() < end:
+            rpm = 300 + (rpm + 53) % 500
+            src.add_old(1, rpm)
+            time.sleep(0.5)
+            assert all(th.is_alive() for th in t._threads.values())
+        src.add_old(1, 640)
+        assert wait_for(lambda: all(tgt.new_regs[u][modbus.NEW_REG_RPM] == 640 for u in (2, 3)), timeout=20)
+    finally:
+        assert t.stop()
+        src.stop()
+        tgt.stop()
+    assert t.restarts == 0 and t.errors == 0
+    assert "[E]통신 끊김" in out.text("TARGET") and "(예외응답:4)" in out.text("TARGET")
+    assert "[E]" not in out.text("SOURCE")            # 신규모터 문제가 기존모터 통신에 영향 없음
+
+
 # ---------------------------------------------------------------- 화면
 @pytest.fixture
 def app(M, tmp_path, monkeypatch):
@@ -544,6 +662,24 @@ def test_ui_log_window_is_capped(M, app, monkeypatch):
     _pump(app, 0.5)
     text = app.txt_tgt.get("1.0", "end").strip().splitlines()
     assert len(text) <= 200 and text[-1].endswith("줄 1499")
+
+
+def test_ui_apply_clicked_rapidly(M, app, gw):
+    gw.add_new(2)
+    app.load_settings(_settings(M, gw, manual=True, src_rpm=400, tgt_ids=[2, 0, 0, 0, 0]))
+    app.on_start()
+    for i in range(300):
+        app.sp_src_rpm.var.set(str(i * 7 % 801))
+        app.btn_apply.invoke()
+        if i % 20 == 0:
+            app.root.update()
+    final = 299 * 7 % 801
+    end = time.monotonic() + 10
+    while time.monotonic() < end and gw.new_regs[2][modbus.NEW_REG_RPM] != final:
+        _pump(app, 0.1)
+    assert gw.new_regs[2][modbus.NEW_REG_RPM] == final
+    assert app.tester.restarts == 0 and app.tester.errors == 0
+    app.stop()
 
 
 def test_ui_close_saves_settings(M, app, gw):
