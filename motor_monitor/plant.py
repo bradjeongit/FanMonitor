@@ -13,10 +13,11 @@ from typing import Dict, List, Optional, Tuple
 
 from . import config as cfgmod
 from .config import LineConfig, MiniItem, MotorEntry
-from .constants import HOUSE_LINES, MotorStatus, MotorType
+from .constants import HOUSE_LINES, SPEED_MEMORY_FILE, MotorStatus, MotorType
 from .errorlog import ErrorLog
 from .helpers import get_house_name
 from .house import HouseLine, motor_key
+from .speedtrim import SpeedMemory
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +52,9 @@ class Plant:
                  error_log_dir: Optional[str] = None) -> None:
         self.config_path = config_path or cfgmod.default_config_path()
         self.errors = ErrorLog(error_log_dir)
+        # 오차 안에 든 지정값 기억 (다음 실행의 최초 신호). Config.dll 과 같은 폴더의 speed_memory.json
+        self.memory = SpeedMemory(os.path.join(os.path.dirname(os.path.abspath(self.config_path)),
+                                               SPEED_MEMORY_FILE))
         # 모니터링 모드: 모터 상태를 읽기만 하고 제어(쓰기) 신호는 보내지 않음.
         # 시작 모드는 --monitoring 옵션으로 정하고, 실행 중에는 화면의 모드 전환 버튼으로 바꿈(set_monitoring).
         # 모니터링 모드에서는 시작/종료 시 Config.dll 자동 저장을 하지 않음 (사용자가 직접 바꾼 설정만 저장).
@@ -70,6 +74,13 @@ class Plant:
             return
         self._monitoring = monitoring
         log.warning("실행 모드 전환: %s", "모니터링 모드 (제어 신호 전송 안 함)" if monitoring else "제어 모드")
+        if not monitoring:
+            self.kick_all()                   # 30초를 기다리지 않고 바로 점검해 제어 신호를 보냄
+
+    def kick_all(self) -> None:
+        """모든 구역을 다음 점검(30초)까지 기다리지 않고 바로 한 번 점검."""
+        for h in self.houses.values():
+            h.kick()
 
     # ------------------------------------------------------------- 설정
     def load(self) -> None:
@@ -99,6 +110,7 @@ class Plant:
     def set_line_config(self, code: str, cfg: LineConfig) -> None:
         self.configs[code] = cfg
         self.save()
+        self.kick_all()                       # 수동 RPM·참조 변경을 바로 반영 (다른 구역의 구역 참조에도 영향)
 
     # ------------------------------------------------------------- 조회
     def find_reference_users(self, line_code: str, motor_id: int) -> List[str]:
@@ -135,13 +147,14 @@ class Plant:
                 h.update_status()
 
     def shutdown(self) -> None:
-        """프로그램 종료: 설정 저장(모니터링 모드 제외) 후 모든 구역 제어 종료."""
+        """프로그램 종료: 설정 저장(모니터링 모드 제외) 후 모든 구역 제어 종료. 속도 기억값은 항상 저장."""
         try:
             if not self.monitoring:
                 self.save()
         finally:
             for h in self.houses.values():
                 h.service_stop()
+            self.memory.save()
 
     # ------------------------------------------------------------- 다른 프로그램 설정 가져오기
     @property

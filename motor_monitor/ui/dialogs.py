@@ -231,10 +231,36 @@ class MessageDialog(BaseDialog):
             b = RoundButton(btns, text, lambda i=i: self.press(i), style="submit" if i == 0 else "normal")
             b.pack(side="left", padx=(0, 5))
             self.buttons.append(b)
+        # 키보드: 첫 버튼(예/확인) = Enter·Space·Y, 둘째 버튼(아니오) = Esc·N. 한글 입력 상태의 ㅛ/ㅜ 도 같음
+        first = buttons[0] if buttons else "확인"
+        hint = f"Enter·Space·Y = {first}" + (f"   Esc·N = {buttons[1]}" if len(buttons) > 1 else "")
+        self.lbl_keys = tk.Label(self.footer, text=hint, bg=T.WHITE, fg="#8a8a8a", font=T.font(8))
+        self.lbl_keys.pack(side="left", padx=(12, 0))
+        for seq in ("<space>", "<KP_Enter>"):
+            self.bind(seq, lambda e: self._key_default())
+        self.bind("<Key>", self._on_key, add="+")
         self.update_idletasks()
         self._dlg_h = 40 + max(self.lbl_msg.winfo_reqheight(), 34) + 28 + 50 + 2
 
+    def _key_default(self) -> str:
+        self.on_default()
+        return "break"
+
+    def _on_key(self, e) -> Optional[str]:
+        """Y(ㅛ) = 첫 버튼, N(ㅜ) = 둘째 버튼. Enter·Space·Esc 는 따로 연결."""
+        ch = (e.char or "").lower()
+        ks = (e.keysym or "").lower()
+        if ks == "y" or ch in ("y", "ㅛ"):
+            self.press(0)
+            return "break"
+        if (ks == "n" or ch in ("n", "ㅜ")) and len(self.buttons) > 1:
+            self.press(1)
+            return "break"
+        return None
+
     def press(self, index: int) -> None:
+        if not self.winfo_exists():
+            return
         self.result = index
         self.destroy()
 
@@ -545,6 +571,10 @@ class MotorDialog(BaseDialog):
                                       text=f"구역 참조: 이 구역 신규모터가 따르는 값(구역설정의 RPM 제어 소스)을 최고속도 "
                                            f"{MAX_RPM} RPM 대비 %로 바꿔 같은 비율로 운전합니다. "
                                            "값이 없으면 이전 속도를 유지합니다.")
+        # 모터 최고속도(h8) 기준 % (수정 창, 구역 제어 중 h8 을 읽은 뒤에만 표시)
+        self.motor_max_rpm = 0
+        self.lbl_motor_max = tk.Label(self.ctrl_holder, bg=T.WHITE, fg="#1f4e79", font=T.font(8, bold=True),
+                                      anchor="w", justify="left", text="")
         self.ctrl_row_line = DottedSeparator(self.ctrl_holder)
 
         left = tk.Frame(self.footer, bg=T.WHITE)
@@ -585,11 +615,13 @@ class MotorDialog(BaseDialog):
             self.ctrl_speed_row.pack(side="top", fill="x", padx=(10, 10))
             self.ctrl_ref_row.pack(side="top", fill="x", padx=(10, 10))
             self.ctrl_ref_note.pack(side="top", fill="x", padx=(30, 10))
+            if self.motor_max_rpm > 0:
+                self.lbl_motor_max.pack(side="top", fill="x", padx=(30, 10), pady=(2, 0))
             self.ctrl_row_line.pack(side="top", fill="x", pady=(4, 0))
             self._on_ctrl_mode()
         else:
             for w in (self.ctrl_ip_row, self.ctrl_speed_row, self.ctrl_ref_row, self.ctrl_ref_note,
-                      self.ctrl_row_line):
+                      self.lbl_motor_max, self.ctrl_row_line):
                 w.pack_forget()
         self._dlg_h = self.CTRL_H if show else self.BASE_H
         if self.winfo_ismapped():
@@ -602,10 +634,20 @@ class MotorDialog(BaseDialog):
         self._show_set_pct()
 
     def _show_set_pct(self) -> None:
-        """수동 지정 RPM 옆에 1100 대비 % 표시"""
+        """수동 지정 RPM 옆에 1100 대비 % 표시 (+ 모터 최고속도를 알면 그 대비 %)"""
         v = try_parse_int(self.txtSETRPM.get())
-        pct = f" = {pct_text(rpm_to_pct(v))}" if v is not None and 0 <= v <= MAX_RPM else ""
+        ok = v is not None and 0 <= v <= MAX_RPM
+        pct = f" = {pct_text(rpm_to_pct(v))}" if ok else ""
         self.lbl_set_pct.configure(text=f"RPM (0~{MAX_RPM}){pct}")
+        if self.motor_max_rpm > 0:
+            ref = self.ctrl_mode_var.get() == CTRL_MODE_REF
+            want = self.plant.houses[self.house_code].zone_reference()[1] if ref else (v if ok else None)
+            text = f"모터 최고속도(h8) {self.motor_max_rpm} RPM"
+            if want is not None:
+                text += f": 원하는 속도 {want} RPM = 최고속도의 {pct_text(want * 100 / self.motor_max_rpm)}"
+                if want > self.motor_max_rpm:
+                    text += " (최고속도보다 높아 최고속도로 운전)"
+            self.lbl_motor_max.configure(text=text)
 
     def zone_reference_text(self) -> str:
         """이 구역 신규모터가 따르는 값과 그 % (예: '1구역 기존모터 155 → 지금 770 RPM = 70%')."""
@@ -682,6 +724,9 @@ class MotorDialog(BaseDialog):
                     self._set_text(self.txtSETRPM, m.set_rpm)
                     self.ctrl_ip = m.ip
                     self.ctrl_port = m.port
+                    self.motor_max_rpm = m.max_rpm
+                    if m.max_rpm > 0:
+                        self.show_ctrl_rows(True)       # 최고속도 줄 표시
                     self.lbl_zone_ref.configure(text=self.zone_reference_text())
                     self.ctrl_mode_var.set(m.ctrl_mode)
                     self._on_ctrl_mode()

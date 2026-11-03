@@ -28,6 +28,7 @@ if os.path.exists(cfg_path):
     os.remove(cfg_path)
 C.SEND_INTERVAL = 0.05
 C.CYCLE_INTERVAL = 0.1
+C.CHECK_INTERVAL = 0.5          # 캡처용: 30초 점검을 짧게
 
 # 예시 구성: 구역마다 기존모터 1~2개(참조용) + 신규모터 여러 개
 ZONES = {
