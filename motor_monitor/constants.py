@@ -32,15 +32,18 @@ ERROR_RETRY_DELAY = 1.0         # 송신 중 예외 발생 후 대기
 RESTART_DELAY = 1.0             # 재시작 시 중지~시작 사이 대기
 CMD_IDX_MAX = 9999              # 트랜잭션 번호 최대값(초과 시 0)
 
-# ---- 네트워크 기본값 ----
-DEFAULT_PORT = 502
+# ---- 네트워크 ----
+# Modbus TCP 포트. 모든 통신장치(게이트웨이)와 ECblue 모터가 502 를 쓰므로 고정합니다.
+# 화면에서 입력하거나 보여주지 않으며, 설정 파일에 다른 값이 있어도 502 로 접속합니다.
+MODBUS_PORT = 502
+DEFAULT_PORT = MODBUS_PORT      # 예전 이름
 DEFAULT_IP_PREFIX = "192.168.0."
 
 
 class MotorType(IntEnum):
     OLD_MOTOR = 0   # 기존 모터 (RPM 을 읽어오는 모터)
     NEW_MOTOR = 1   # 신규 모터 (RPM 을 써넣는 모터)
-    OLD_CTRL = 2    # 기존모터제어 (ECblue 기존 모터를 Modbus 로 직접 속도 지정, 모터마다 IP/PORT/ID)
+    OLD_CTRL = 2    # 기존모터제어 (ECblue 기존 모터를 Modbus 로 직접 속도 지정, 모터마다 IP/ID)
 
 
 class MotorStatus(IntEnum):
@@ -61,7 +64,23 @@ CTRL_MODE_WRITE_MAX_TRIES = 3
 
 # 기존모터제어 속도 지정 방법
 CTRL_MODE_MANUAL = "manual"     # 수동 지정: 운전속도(set_rpm)로 계속 운전
-CTRL_MODE_REF = "ref"           # 참조모터: 지정한 IP/PORT/ID 기존모터의 실제 회전수를 따라감 (최대 MAX_RPM)
+CTRL_MODE_REF = "ref"           # 구역 참조: 이 구역 신규모터가 따르는 값(구역설정의 RPM 제어 소스)을
+                                #   최고속도 MAX_RPM 대비 % 로 바꿔 같은 비율로 운전 (100% = MAX_RPM)
+
+
+def rpm_to_pct(rpm: float) -> float:
+    """RPM -> 최고속도(MAX_RPM) 대비 % (0~100). 표시할 때는 pct_text 로 소수 1자리."""
+    return max(0.0, min(float(rpm), float(MAX_RPM))) * 100.0 / MAX_RPM
+
+
+def pct_to_rpm(pct: float) -> int:
+    """% -> RPM (100% = MAX_RPM, 0~MAX_RPM). 미니 제어기와 같은 계산."""
+    return max(0, min(MAX_RPM, round(MAX_RPM * pct / 100)))
+
+
+def pct_text(pct: float) -> str:
+    """70.0 -> '70%', 63.636 -> '63.6%'"""
+    return f"{round(pct, 1):g}%"
 
 
 def id_range(mtype: "MotorType") -> tuple:

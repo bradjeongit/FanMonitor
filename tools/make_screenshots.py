@@ -64,18 +64,19 @@ for code, (olds, news) in ZONES.items():
         source_ip=og.host, source_port=og.port, target_ip=ng.host, target_port=ng.port,
         source_manual=False, source_line=line, source_id=sid)
 plant.houses["H1R8"].add_motor(9, MotorType.NEW_MOTOR, False)     # 중지 예시
-# 기존모터제어 예시: 1구역 ECblue 10번은 700 RPM 수동 지정, 2구역 ECblue 12번은 참조모터(2구역 기존모터 66) 따라감
+# 기존모터제어 예시: 1구역 ECblue 10번은 700 RPM 수동 지정,
+# 2구역 ECblue 12번은 구역 참조(2구역 신규모터가 따르는 2구역 기존모터 66 의 값을 1100 대비 % 로 같은 비율)
+# (시뮬레이터는 PC 안에서 여러 개를 띄우려고 임의 PORT 를 씀. 화면에는 PORT 가 나오지 않음)
 old_gw["H1R1"].add_ecblue(10, analog_rpm=0)
 plant.houses["H1R1"].add_motor(10, MotorType.OLD_CTRL, True, ip=old_gw["H1R1"].host,
                                port=old_gw["H1R1"].port, set_rpm=700)
 old_gw["H1R2"].add_ecblue(12, analog_rpm=0)
 plant.houses["H1R2"].add_motor(12, MotorType.OLD_CTRL, True, ip=old_gw["H1R2"].host, port=old_gw["H1R2"].port,
-                               ctrl_mode=C.CTRL_MODE_REF, ref_ip=old_gw["H1R2"].host, ref_port=old_gw["H1R2"].port,
-                               ref_id=66)
+                               ctrl_mode=C.CTRL_MODE_REF)
 plant.save()
 # 에러 로그 예시 (지난 기록)
-plant.errors.error("6구역", "신규모터 통신장치", "192.168.0.12:502 접속 실패 (10초마다 재시도)")
-plant.errors.recover("6구역", "신규모터 통신장치", "192.168.0.12:502 다시 접속됨")
+plant.errors.error("6구역", "신규모터 통신장치", "192.168.0.12 접속 실패 (10초마다 재시도)")
+plant.errors.recover("6구역", "신규모터 통신장치", "192.168.0.12 다시 접속됨")
 
 W, H = (int(v) for v in os.environ.get("SHOT_SIZE", "1920x1040").split("x"))
 root = tk.Tk()
@@ -153,16 +154,16 @@ def line_dialog():
         crop_dialog("dlg_line_ref", d)
         ox, oy = d.winfo_rootx(), d.winfo_rooty()
         MARKS["dlg_line_ref"] = [(n, bbox(w, ox, oy)) for n, w in [
-            ("1", d.header), ("2", d.lbl_house), ("3", d.txtSIP.master), ("4", d.txtSPORT.master),
-            ("5", d.txtTIP.master), ("6", d.txtTPORT.master), ("7", d.rb_source_manual), ("8", d.rb_source_ref),
-            ("9", d.cb_lines), ("10", d.cb_ids), ("11", d.BtnSave), ("12", d.BtnCancel)]]
+            ("1", d.header), ("2", d.lbl_house), ("3", d.txtSIP.master), ("4", d.txtTIP.master),
+            ("5", d.rb_source_manual), ("6", d.rb_source_ref), ("7", d.cb_lines), ("8", d.cb_ids),
+            ("9", d.BtnSave), ("10", d.BtnCancel)]]
         d.source_mode.set("manual")
         d._on_mode()
 
         def manual():
             crop_dialog("dlg_line_manual", d)
             MARKS["dlg_line_manual"] = [(n, bbox(w, d.winfo_rootx(), d.winfo_rooty()))
-                                        for n, w in [("13", d.txtMRPM.master), ("14", d.lbl_rpm_range)]]
+                                        for n, w in [("11", d.txtMRPM.master), ("12", d.lbl_rpm_range)]]
             d.destroy()
             root.after(100, motor_add)
         root.after(200, manual)
@@ -189,19 +190,19 @@ def motor_add():
 
 
 def motor_add_ctrl():
-    d = dialogs.MotorDialog(root, plant, win.images, "H1R1", "ADD")
+    d = dialogs.MotorDialog(root, plant, win.images, "H1R2", "ADD")
     d.motor_type_var.set(2)
     d._on_type()
-    d.txtID.insert(0, "2")
+    d.txtID.insert(0, "14")
     d.txtSETRPM.insert(0, "700")
+    d._show_set_pct()
 
     def m():
         crop_dialog("dlg_motor_add_ctrl", d)
         ox, oy = d.winfo_rootx(), d.winfo_rooty()
         MARKS["dlg_motor_add_ctrl"] = [(n, bbox(w, ox, oy)) for n, w in [
-            ("15", d.rb_ctrlmotor), ("16", d.txtCIP.master), ("17", d.txtCPORT.master),
-            ("18", d.rb_ctrl_manual), ("19", d.txtSETRPM.master), ("20", d.rb_ctrl_ref),
-            ("21", d.txtRIP.master), ("22", d.txtRPORT.master), ("23", d.txtRID.master), ("24", d.BtnRefZone)]]
+            ("15", d.rb_ctrlmotor), ("16", d.txtCIP.master), ("17", d.rb_ctrl_manual),
+            ("18", d.txtSETRPM.master), ("19", d.rb_ctrl_ref), ("20", d.lbl_zone_ref)]]
         d.destroy()
         root.after(100, motor_mod)
     root.after(500, m)
@@ -217,6 +218,19 @@ def motor_mod():
         MARKS["dlg_motor_mod"] = [(n, bbox(w, ox, oy)) for n, w in [
             ("12", d.mod_type_line), ("13", d.lblID), ("14", d.BtnDelete)]]
         d.destroy()
+        root.after(100, message)
+    root.after(500, m)
+    d.show_modal()
+
+
+def message():
+    """확인·알림 창 (운영체제 메시지 상자 대신, 프로그램 창 안 가운데에 뜸)"""
+    d = dialogs.MessageDialog(root, "제어 모드로 전환", "제어 모드로 전환하시겠습니까?\n전환하면 제어 신호(수동·동작·RPM 설정)를 "
+                              "모터로 보냅니다.", "warning", ("예", "아니오"))
+
+    def m():
+        crop_dialog("dlg_message", d)
+        d.on_cancel()
         root.after(100, error_log)
     root.after(500, m)
     d.show_modal()
@@ -225,7 +239,7 @@ def motor_mod():
 def error_log():
     win.open_error_log()
     w = win.error_window
-    w.geometry("920x330+40+40")
+    dialogs.place_inside(w, root, 920, 330)
 
     def m():
         crop_dialog("error_log", w)

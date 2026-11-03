@@ -3,20 +3,21 @@
 - ErrorLogWindow (SCR-ERRLOG): 최근 에러/복구 기록 (최신순). 창이 열려 있는 동안 2초마다 새 기록 반영
 - ConfigImportDialog (DLG-IMPORT-CFG): 운영 프로그램 설정(Config.dll / uconfig.dll / Config.ini) 미리보기 후 적용
 - MiniImportDialog (DLG-IMPORT-MINI): 미니 제어기 항목(mini_control.json)을 한 구역의 기존모터제어로 추가
+모든 창은 메인 창 안 가운데에 뜸 (dialogs.place_inside).
 """
 from __future__ import annotations
 
-import os
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import ttk
 from typing import TYPE_CHECKING, Callable, List, Optional
 
 from ..config import MiniItem
-from ..constants import HOUSE_LINES, MAX_RPM
+from ..constants import HOUSE_LINES, MAX_RPM, pct_text
 from ..errorlog import ERROR, RECOVER
 from ..helpers import get_house_name
+from . import msgbox
 from . import theme as T
-from .dialogs import BaseDialog
+from .dialogs import BaseDialog, place_inside
 from .widgets import RoundButton
 
 if TYPE_CHECKING:
@@ -31,13 +32,14 @@ class ErrorLogWindow(tk.Toplevel):
 
     COLS = (("time", "시각", 140), ("level", "구분", 50), ("zone", "구역", 55),
             ("target", "대상", 230), ("msg", "내용", 420))
+    SIZE = (920, 480)
 
     def __init__(self, owner: tk.Misc, plant: "Plant", on_seen: Optional[Callable[[], None]] = None) -> None:
         super().__init__(owner)
+        self.withdraw()
         self.plant = plant
         self.on_seen = on_seen
         self.title("에러 로그")
-        self.geometry("920x480")
         self.minsize(640, 300)
         self.configure(bg=T.WHITE)
         self._version = -1
@@ -78,6 +80,9 @@ class ErrorLogWindow(tk.Toplevel):
         self.refresh_force()
         self._after = self.after(REFRESH_MS, self._tick)
         self.bind("<Destroy>", self._on_destroy, add="+")
+        place_inside(self, owner, *self.SIZE)          # 메인 창 안 가운데 (모니터 기준 아님)
+        self.deiconify()
+        self.lift()
 
     def _on_destroy(self, e) -> None:
         if e.widget is self and self._after:
@@ -117,8 +122,8 @@ class ErrorLogWindow(tk.Toplevel):
         return [tuple(self.tree.item(i, "values")) for i in self.tree.get_children()]
 
     def on_clear(self) -> None:
-        if messagebox.askyesno("목록 지우기", "화면의 에러 로그 목록을 지우시겠습니까?\n(파일 기록은 그대로 남습니다)",
-                               parent=self):
+        if msgbox.ask_yes_no("목록 지우기", "화면의 에러 로그 목록을 지우시겠습니까?\n(파일 기록은 그대로 남습니다)",
+                             parent=self):
             self.plant.errors.clear()
             self.refresh_force()
 
@@ -176,7 +181,7 @@ class ConfigImportDialog(BaseDialog):
         self.destroy()
 
     def info(self, msg: str) -> None:
-        messagebox.showinfo("가져오기", msg, parent=self)
+        msgbox.show_info("가져오기", msg, parent=self)
 
 
 class MiniImportDialog(BaseDialog):
@@ -193,7 +198,8 @@ class MiniImportDialog(BaseDialog):
         tk.Label(self.body, text=f"파일: {path}", bg=T.WHITE, font=T.font(9, bold=True), anchor="w",
                  wraplength=610, justify="left").pack(side="top", fill="x", padx=12, pady=(10, 4))
         tk.Label(self.body, text=f"항목 {len(items)}개를 기존모터제어로 추가합니다. 속도 %는 수동 지정 RPM"
-                                 f"(100% = {MAX_RPM}), 참조팬은 참조모터(PORT 502)로 바꿉니다.",
+                                 f"(100% = {MAX_RPM} RPM), 참조팬 항목은 '구역 참조'(그 구역 신규모터가 따르는 값을 "
+                                 f"{MAX_RPM} RPM 대비 %로 같은 비율)로 바꿉니다. 미니 제어기에 지정한 참조팬은 쓰지 않습니다.",
                  bg=T.WHITE, fg=T.TEXT_DARK, font=T.font(9), anchor="w", wraplength=610,
                  justify="left").pack(side="top", fill="x", padx=12)
         box = tk.Frame(self.body, bg=T.WHITE)
@@ -203,8 +209,11 @@ class MiniImportDialog(BaseDialog):
             self.tree.heading(c, text=t)
             self.tree.column(c, width=w, anchor="w")
         for it in items:
-            spec = (f"참조모터 {it.ref_ip}:502 ID {it.ref_uid}" if it.mode == "ref" and it.ref_ip
-                    else f"수동 지정 {it.rpm} RPM ({it.pct:g}%)")
+            if it.is_ref:
+                was = f" (미니 제어기 참조팬 {it.ref_ip} ID {it.ref_uid} 대신)" if it.ref_ip else ""
+                spec = f"구역 참조{was}"
+            else:
+                spec = f"수동 지정 {it.rpm} RPM ({pct_text(it.pct)})"
             self.tree.insert("", "end", values=(it.ip, it.uid, spec))
         self.tree.pack(fill="both", expand=True)
         row = tk.Frame(self.body, bg=T.WHITE)
@@ -244,5 +253,5 @@ class MiniImportDialog(BaseDialog):
         msg = f"{name}에 {len(self.added)}개를 추가했습니다."
         if self.skipped:
             msg += "\n\n건너뜀:\n" + "\n".join(self.skipped)
-        messagebox.showinfo("가져오기", msg, parent=self)
+        msgbox.show_info("가져오기", msg, parent=self)
         self.destroy()

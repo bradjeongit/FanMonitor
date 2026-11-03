@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable, List, Optional
 
-from ..constants import CTRL_MODE_REF, MotorStatus, MotorType
+from ..constants import CTRL_MODE_REF, MotorStatus, MotorType, pct_text, rpm_to_pct
 from ..house import Motor
 from . import theme as T
 
@@ -241,12 +241,15 @@ class MotorListView(tk.Frame):
             return "oldmotor", "기존모터"
         if m.mtype == MotorType.OLD_CTRL:
             if m.ctrl_mode == CTRL_MODE_REF:
-                ref = "-" if m.ref_rpm is None else f"{m.ref_rpm} RPM"
-                speed = (f"참조모터 {m.ref_text} (현재 {ref})"
-                         + ("" if m.ctrl_target is None else f" → 지정 {m.ctrl_target} RPM"))
+                src = f" {m.ref_desc}" if m.ref_desc else ""
+                now = ("값 없음" if m.ref_rpm is None
+                       else f"{m.ref_rpm} RPM = {pct_text(rpm_to_pct(m.ref_rpm))}")
+                speed = (f"구역 참조{src} (지금 {now})"
+                         + ("" if m.ctrl_target is None
+                            else f" → 지정 {pct_text(rpm_to_pct(m.ctrl_target))} = {m.ctrl_target} RPM"))
             else:
-                speed = f"수동 지정 {m.set_rpm} RPM"
-            tip = f"기존모터제어 {m.ip}:{m.port}\n운전속도: {speed}"
+                speed = f"수동 지정 {m.set_rpm} RPM ({pct_text(rpm_to_pct(m.set_rpm))})"
+            tip = f"기존모터제어 {m.ip}\n운전속도: {speed}"
             return "oldmotor_ctrl", tip + (f"\n{m.ctrl_note}" if m.ctrl_note else "")
         if m.use_limit:
             return "newmotor_limit", "신규모터(제한모드)"

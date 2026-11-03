@@ -38,7 +38,7 @@ git 으로 받은 폴더에서 `update.bat` 을 더블클릭하면 GitHub `main`
 ```
 python -m pytest                                  # 로직 시험
 xvfb-run -a python -m pytest                      # (리눅스) 화면 시험 포함
-python -m motor_monitor.simulator --port 5020 --old 2:770 --new 1,3   # 가상 모터 통신장치
+python -m motor_monitor.simulator --old 2:770 --new 1,3   # 가상 모터 통신장치 (127.0.0.1:502, PORT 502 고정)
 python -m motor_monitor.config Config.dll                           # 설정 파일 평문 확인
 ```
 

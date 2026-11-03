@@ -6,9 +6,10 @@
   목표 RPM = 수동RPM 또는 참조 기존모터 RPM, 속도제한 사용 시 최대속도 이하로 제한
 - 상태: 응답 수신 = 정상, 명령 후 60초 무응답 또는 통신장치 접속 실패 = '이상표시'(빨간 !),
   마지막 응답 후 1시간 = 이상. 다시 응답이 오면 바로 정상 표시로 돌아감
-- 기존모터제어(OLD_CTRL): 모터마다 지정한 IP/PORT/ID 의 ECblue 기존 모터에 직접 접속해
+- 기존모터제어(OLD_CTRL): 모터마다 지정한 IP/ID 의 ECblue 기존 모터에 직접 접속(PORT 502 고정)해
   h4(제어모드=버스 절대회전수) → h1(Enable) → h2(운전속도) 순으로 맞추고, i14(실제 회전수)를 읽음.
-  운전속도 = 수동 지정값, 또는 참조모터(IP/PORT/ID)의 실제 회전수(최대 MAX_RPM, 미니 제어기의 참조팬과 같음)
+  운전속도 = 수동 지정값, 또는 구역 참조값: 이 구역 신규모터가 따르는 값(수동 RPM 또는 참조 기존모터 회전수)을
+  최고속도 MAX_RPM 대비 % 로 바꿔 같은 비율(MAX_RPM × %)로 지정. 값이 없으면 이전 속도를 유지
 - 에러 기록(plant.errors): 접속 실패·연결 끊김·응답 없음·쓰기 실패와 그 복구를 상태가 바뀔 때만 기록
 - 모니터링 모드(plant.monitoring): 읽기만 하고 쓰기(제어) 명령은 만들지도 보내지도 않음
   (화면에서 실행 중에 바꿀 수 있으며, 매 명령마다 현재 모드를 다시 확인)
@@ -21,7 +22,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Callable, Deque, Dict, List, Optional
+from typing import TYPE_CHECKING, Callable, Deque, Dict, List, Optional, Tuple
 
 from . import constants as C
 from . import modbus
@@ -39,8 +40,8 @@ DEBUG_LINE = "ALL"          # 구역코드 또는 "ALL"
 DEBUG_IDS = {5, 50}         # 출력할 모터 ID (0 은 구역 공통 메시지로 항상 출력)
 
 
-def motor_key(mtype: MotorType, mid: int, ip: str = "", port: int = 0) -> str:
-    """모터 고유 키 '종류_ID' (예: '0_5'). 기존모터제어는 접속처가 달라 '2_ID@IP:PORT'."""
+def motor_key(mtype: MotorType, mid: int, ip: str = "", port: int = C.MODBUS_PORT) -> str:
+    """모터 고유 키 '종류_ID' (예: '0_5'). 기존모터제어는 접속처가 달라 '2_ID@IP:PORT' (PORT 는 502 고정)."""
     if MotorType(mtype) == MotorType.OLD_CTRL:
         return f"{int(mtype)}_{mid}@{ip}:{port}"
     return f"{int(mtype)}_{mid}"
@@ -61,14 +62,13 @@ class Motor:
     status: MotorStatus = MotorStatus.READY
     must_send_zero: bool = False      # 사용중지 선택 시 RPM 0 을 1회 보내기 위한 표시
     ip: str = ""                      # 기존모터제어: 접속 IP
-    port: int = 0                     # 기존모터제어: 접속 PORT
+    port: int = C.MODBUS_PORT         # 기존모터제어: 접속 PORT (502 고정, 화면에 없음)
     set_rpm: int = 0                  # 기존모터제어: 수동 지정 운전 속도
-    ctrl_mode: str = CTRL_MODE_MANUAL  # 기존모터제어: manual 수동 지정 / ref 참조모터
-    ref_ip: str = ""                  # 기존모터제어(참조모터): 참조 기존모터 접속 IP
-    ref_port: int = 0                 # 기존모터제어(참조모터): 참조 기존모터 접속 PORT
-    ref_id: int = 0                   # 기존모터제어(참조모터): 참조 기존모터 ID
-    ref_rpm: Optional[int] = None     # 기존모터제어(참조모터): 마지막으로 읽은 참조 회전수
-    ctrl_target: Optional[int] = None  # 기존모터제어: 마지막으로 정한 운전속도 (참조 응답 없을 때 유지)
+    ctrl_mode: str = CTRL_MODE_MANUAL  # 기존모터제어: manual 수동 지정 / ref 구역 참조
+    ref_desc: str = ""                # 기존모터제어(구역 참조): 구역 참조값 출처 (예: '2구역 기존모터 66')
+    ref_rpm: Optional[int] = None     # 기존모터제어(구역 참조): 마지막으로 확인한 구역 참조값 (RPM)
+    ref_wait_since: Optional[float] = None  # 기존모터제어(구역 참조): 구역 참조값이 없어진 시각 (60초 넘으면 이상표시)
+    ctrl_target: Optional[int] = None  # 기존모터제어: 마지막으로 정한 운전속도 (구역 참조값이 없을 때 유지)
     mode_tries: int = 0               # 기존모터제어: 제어모드(h4, NV) 설정 시도 횟수
     ctrl_note: str = ""               # 기존모터제어: 마지막 제어 문제 설명 (있으면 이상표시)
 
@@ -78,19 +78,15 @@ class Motor:
 
     def entry(self) -> MotorEntry:
         return MotorEntry(self.id, self.mtype, self.use, self.use_limit, self.limit_rpm,
-                          self.ip, self.port, self.set_rpm, self.ctrl_mode, self.ref_ip, self.ref_port, self.ref_id)
+                          self.ip, self.port, self.set_rpm, self.ctrl_mode)
 
     @property
     def label(self) -> str:
-        """에러 로그용 이름 (예: '신규모터 ID 5', '기존모터제어 ID 180 (172.27.0.95:502)')"""
+        """에러 로그용 이름 (예: '신규모터 ID 5', '기존모터제어 ID 180 (172.27.0.95)')"""
         name = C.MOTOR_TYPE_NAME[self.mtype]
         if self.mtype == MotorType.OLD_CTRL:
-            return f"{name} ID {self.id} ({self.ip}:{self.port})"
+            return f"{name} ID {self.id} ({self.ip})"
         return f"{name} ID {self.id}"
-
-    @property
-    def ref_text(self) -> str:
-        return f"{self.ref_ip}:{self.ref_port} ID {self.ref_id}"
 
 
 @dataclass
@@ -169,12 +165,12 @@ class _CtrlLinks:
             log.info("[%s][기존모터제어] 접속 실패 %s:%s (%d초 후 재시도)",
                      self.house.code, ep[0], ep[1], C.RECONNECT_DELAY)
             self.retry_at[ep] = time.monotonic() + C.RECONNECT_DELAY
-            self._down(ep, f"{ep[0]}:{ep[1]} 접속 실패 ({C.RECONNECT_DELAY}초마다 재시도)")
+            self._down(ep, f"{ep[0]} 접속 실패 ({C.RECONNECT_DELAY}초마다 재시도)")
             return None
         log.info("[%s][기존모터제어] 접속 성공 %s:%s", self.house.code, ep[0], ep[1])
         if ep in self.down:
             self.down.discard(ep)
-            self.house._log_recover("기존모터제어 통신장치", f"{ep[0]}:{ep[1]} 다시 접속됨")
+            self.house._log_recover("기존모터제어 통신장치", f"{ep[0]} 다시 접속됨")
         return link
 
     def _down(self, ep: tuple, msg: str) -> None:
@@ -187,7 +183,7 @@ class _CtrlLinks:
         if link is not None:
             link.close()
         self.retry_at[ep] = time.monotonic() + delay
-        self._down(ep, f"{ep[0]}:{ep[1]} {why}")
+        self._down(ep, f"{ep[0]} {why}")
 
     def close_all(self) -> None:
         for link in self.links.values():
@@ -264,8 +260,8 @@ class HouseLine:
             return [m.entry() for m in self._motors.values()]
 
     def add_motor(self, mid: int, mtype: MotorType, use: bool, use_limit: bool = False, limit_rpm: int = 0,
-                  ip: str = "", port: int = 0, set_rpm: int = 0, ctrl_mode: str = CTRL_MODE_MANUAL,
-                  ref_ip: str = "", ref_port: int = 0, ref_id: int = 0) -> bool:
+                  ip: str = "", port: int = C.MODBUS_PORT, set_rpm: int = 0,
+                  ctrl_mode: str = CTRL_MODE_MANUAL) -> bool:
         key = motor_key(mtype, mid, ip, port)
         with self._lock:
             if key in self._motors:
@@ -273,7 +269,7 @@ class HouseLine:
             status = MotorStatus.READY if use else MotorStatus.NOTUSE
             self._motors[key] = Motor(id=mid, mtype=MotorType(mtype), use=use, use_limit=use_limit,
                                       limit_rpm=limit_rpm, status=status, ip=ip, port=port, set_rpm=set_rpm,
-                                      ctrl_mode=ctrl_mode, ref_ip=ref_ip, ref_port=ref_port, ref_id=ref_id)
+                                      ctrl_mode=ctrl_mode)
             self._order.append(key)
             self._resort()
             self._touch()
@@ -291,8 +287,8 @@ class HouseLine:
         return True
 
     def add_entry(self, e: MotorEntry) -> bool:
-        return self.add_motor(e.id, e.mtype, e.use, e.use_limit, e.limit_rpm, e.ip, e.port, e.set_rpm,
-                              e.ctrl_mode, e.ref_ip, e.ref_port, e.ref_id)
+        return self.add_motor(e.id, e.mtype, e.use, e.use_limit, e.limit_rpm, e.ip, e.port or C.MODBUS_PORT,
+                              e.set_rpm, e.ctrl_mode)
 
     def clear_motors(self) -> None:
         with self._lock:
@@ -301,9 +297,8 @@ class HouseLine:
             self._touch()
 
     def mod_motor(self, dkey: str, use: bool, use_limit: bool = False, limit_rpm: int = 0,
-                  set_rpm: Optional[int] = None, ctrl_mode: Optional[str] = None,
-                  ref: Optional[tuple] = None) -> None:
-        """사용여부/속도제한(/기존모터제어 운전속도·속도 지정 방법·참조모터) 수정. 운영 Mod_Motor"""
+                  set_rpm: Optional[int] = None, ctrl_mode: Optional[str] = None) -> None:
+        """사용여부/속도제한(/기존모터제어 운전속도·속도 지정 방법) 수정. 운영 Mod_Motor"""
         with self._lock:
             m = self._motors.get(dkey)
             if m is None:
@@ -325,11 +320,9 @@ class HouseLine:
             if ctrl_mode is not None:
                 if ctrl_mode != m.ctrl_mode:
                     m.ctrl_target = None
-                m.ctrl_mode = ctrl_mode
-            if ref is not None:
-                if tuple(ref) != (m.ref_ip, m.ref_port, m.ref_id):
                     m.ref_rpm = None
-                m.ref_ip, m.ref_port, m.ref_id = ref
+                    m.ref_wait_since = None
+                m.ctrl_mode = ctrl_mode
             self._touch()
 
     def sort(self, skey: str) -> None:
@@ -472,6 +465,7 @@ class HouseLine:
                 m.ctrl_note = ""
                 m.ctrl_target = None
                 m.ref_rpm = None
+                m.ref_wait_since = None
                 m.check_since = None
                 m.rdate = None
                 m.status = MotorStatus.READY if m.use else MotorStatus.NOTUSE
@@ -523,22 +517,21 @@ class HouseLine:
         self._debug(0, f"[{self.code}][{ch.name}] 접속시도")
         if ch.connect(ip, port, C.CONNECT_CHECK_TIMEOUT):
             log.info("[%s][%s] 접속 성공 %s:%s", self.code, ch.name, ip, port)
-            self._mark_channel_up(ch, mtype, f"{ip}:{port} 다시 접속됨")
+            self._mark_channel_up(ch, mtype, f"{ip} 다시 접속됨")
             return True
         log.info("[%s][%s] 접속 실패 %s:%s (%d초 후 재시도)", self.code, ch.name, ip, port, C.RECONNECT_DELAY)
         ch.net_status = False
-        self._mark_channel_down(ch, mtype, f"{ip}:{port} 접속 실패 ({C.RECONNECT_DELAY}초마다 재시도)")
+        self._mark_channel_down(ch, mtype, f"{ip} 접속 실패 ({C.RECONNECT_DELAY}초마다 재시도)")
         stop.wait(C.RECONNECT_DELAY)
         return False
 
     def _channel_lost(self, ch: _Channel, mtype: MotorType, why: str) -> None:
         """연결이 끊김: 소켓 정리 후 다음 주기에 다시 접속."""
         cfg = self.plant.configs[self.code]
-        ip, port = ((cfg.source_ip, cfg.source_port) if mtype == MotorType.OLD_MOTOR
-                    else (cfg.target_ip, cfg.target_port))
+        ip = cfg.source_ip if mtype == MotorType.OLD_MOTOR else cfg.target_ip
         ch.close()
         ch.net_status = False
-        self._mark_channel_down(ch, mtype, f"{ip}:{port} 연결 끊김 ({why})")
+        self._mark_channel_down(ch, mtype, f"{ip} 연결 끊김 ({why})")
 
     def _next_src_idx(self) -> int:
         i = self._src_cmd_idx
@@ -696,6 +689,15 @@ class HouseLine:
         self._debug(0, "참조모터 상태이상")
         return None
 
+    def zone_reference(self) -> Tuple[str, Optional[int]]:
+        """이 구역 신규모터가 따르는 값 (출처 설명, 현재 RPM 또는 None). 기존모터제어 '구역 참조'가 그대로 사용."""
+        cfg = self.plant.configs[self.code]
+        if cfg.source_manual:
+            desc = f"구역 수동 {cfg.manual_rpm} RPM"
+        else:
+            desc = f"{get_house_name(cfg.source_line) or cfg.source_line or '구역 없음'} 기존모터 {cfg.source_id}"
+        return desc, self.resolve_setting_rpm()
+
     def _handle_tgt_frame(self, frame: bytes) -> None:
         p1 = modbus.parse_new_page1(frame)
         if p1 is not None:
@@ -756,7 +758,7 @@ class HouseLine:
                             for m in group:
                                 cur = self._motors.get(m.key)
                                 if cur is not None and cur.use and not cur.had_err:
-                                    cur.had_err, cur.err_note = True, f"{ep[0]}:{ep[1]} 접속 실패"
+                                    cur.had_err, cur.err_note = True, f"{ep[0]} 접속 실패"
                                     self._touch()
                         continue
                     for m in group:
@@ -814,37 +816,51 @@ class HouseLine:
             return False
         return True
 
-    def _ctrl_target(self, links: "_CtrlLinks", link: _Channel, m: Motor,
-                     stop: threading.Event) -> tuple:
-        """운전속도 결정 -> (속도 또는 None, 문제 설명).
-        수동 지정: 운전속도. 참조모터: 참조 기존모터의 실제 회전수(i14, 최대 MAX_RPM).
-        참조모터가 응답하지 않으면 이전에 정한 속도를 유지(없으면 None = 속도를 쓰지 않음)."""
+    def _ctrl_target(self, m: Motor) -> tuple:
+        """운전속도 결정 -> (RPM 또는 None, 문제 설명).
+        수동 지정: 운전속도.
+        구역 참조: 이 구역 신규모터가 따르는 값(구역설정의 수동 RPM 또는 참조 기존모터 회전수)을 그대로 써서
+        최고속도 MAX_RPM 대비 % 를 구하고, 같은 비율(MAX_RPM × %)로 지정. 미니 제어기와 같은 계산(100% = MAX_RPM).
+        값이 없으면(참조 기존모터를 아직 읽지 못함·상태 이상 등) 이전에 정한 속도를 유지(없으면 None = 속도를 쓰지 않음).
+        값이 없는 상태가 NO_RESPONSE_WARN_SEC(60초) 넘게 이어질 때만 이상표시 (구역을 막 시작해 참조 기존모터를
+        아직 읽기 전에는 기다림 - 신규모터의 '60초 응답 없음' 과 같은 기준).
+        참조 기존모터가 이 모터 자신이면 따라가지 않음(자기 회전수를 목표로 하면 속도가 그대로 굳음)."""
         if m.ctrl_mode != CTRL_MODE_REF:
             return max(0, min(int(m.set_rpm), C.MAX_RPM)), ""
-        ep = (m.ref_ip, m.ref_port)
-        rlink = link if ep == (m.ip, m.port) else links.get(ep)
-        r = None
-        if rlink is not None:
-            try:
-                r = self._ctrl_request(rlink, modbus.build_read_input(links.next_tid(), m.ref_id,
-                                                                      modbus.ECB_I_SPEED, 1), stop)
-            except OSError as e:
-                if rlink is link:
-                    raise
-                links.drop(ep, C.ERROR_RETRY_DELAY, f"연결 끊김 ({e})")
+        desc, value = self.zone_reference()      # 다른 구역의 잠금을 쓰므로 이 구역 잠금 밖에서 읽음
+        own = self.plant.reference_endpoint(self.code) == (m.ip, m.port, m.id)
+        now = self._clock()
+        waited = 0.0
         with self._lock:
             cur = self._motors.get(m.key)
-            if r is not None and r.exception is None and r.values:
-                target = max(0, min(r.values[0], C.MAX_RPM))
-                if cur is not None:
-                    cur.ref_rpm, cur.ctrl_target = r.values[0], target
-                    self._touch()
-                return target, ""
             prev = cur.ctrl_target if cur is not None else None
-        why = "접속 실패" if rlink is None else ("응답 없음" if r is None else f"예외 응답 {r.exception}")
+            if cur is not None:
+                shown = (cur.ref_desc, cur.ref_rpm)
+                cur.ref_desc = desc
+                cur.ref_rpm = None if own else value
+                if (cur.ref_desc, cur.ref_rpm) != shown:
+                    self._touch()                # 화면 갱신은 바뀔 때만
+                if value is not None and not own:
+                    cur.ref_wait_since = None
+                else:
+                    if cur.ref_wait_since is None:
+                        cur.ref_wait_since = now
+                    waited = now - cur.ref_wait_since
+            if value is not None and not own:
+                target = C.pct_to_rpm(C.rpm_to_pct(value))
+                if cur is not None:
+                    cur.ctrl_target = target
+                return target, ""
+        if own:
+            why = "이 모터 자신의 회전수라 따라갈 수 없음 (수동 지정으로 바꾸거나 구역설정의 참조기존모터 변경)"
+        elif waited < C.NO_RESPONSE_WARN_SEC:
+            return prev, ""                      # 기다림: 이전 속도 유지(없으면 쓰지 않음), 아직 이상표시 안 함
+        else:
+            why = (f"{C.NO_RESPONSE_WARN_SEC}초 넘게 값 없음 "
+                   "(참조 기존모터 응답 없음·상태 이상 또는 그 구역 실행 안 함)")
         if prev is None:
-            return None, f"참조모터 {m.ref_text} {why} - 속도를 지정하지 않음"
-        return prev, f"참조모터 {m.ref_text} {why} - 이전 지정 {prev} RPM 유지"
+            return None, f"구역 참조값({desc}) {why} - 속도를 지정하지 않음"
+        return prev, f"구역 참조값({desc}) {why} - 이전 지정 {C.pct_text(C.rpm_to_pct(prev))} ({prev} RPM) 유지"
 
     def _ctrl_cycle(self, links: "_CtrlLinks", link: _Channel, m: Motor, stop: threading.Event) -> None:
         key = m.key
@@ -863,8 +879,8 @@ class HouseLine:
                 return
             if cur.check_since is None:
                 cur.check_since = self._clock()
-        # 0) 운전속도 결정 (참조모터면 참조 회전수 읽기 - 모니터링 모드에서도 읽어 표시)
-        target, note = self._ctrl_target(links, link, m, stop)
+        # 0) 운전속도 결정 (구역 참조면 구역 참조값 확인 - 모니터링 모드에서도 확인해 표시)
+        target, note = self._ctrl_target(m)
         # 1) 현재 설정 읽기 h1~h4, 2) 실제 회전수 i14 읽기
         hold = self._ctrl_request(link, modbus.build_read_holding(links.next_tid(), m.id, modbus.ECB_H_CONTROL, 4),
                                   stop)

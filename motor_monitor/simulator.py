@@ -1,10 +1,12 @@
 """장비 없이 시험하기 위한 Modbus TCP 모터 게이트웨이 시뮬레이터.
 
 사용 예)
-  python -m motor_monitor.simulator --port 5020 --old 5:950,6:1000 --new 10,11
-  -> 127.0.0.1:5020 에 기존모터 ID5(950RPM), ID6(1000RPM) 와 신규모터 ID10, ID11 이 있는 게이트웨이 생성
+  python -m motor_monitor.simulator --old 5:950,6:1000 --new 10,11
+  -> 127.0.0.1:502 에 기존모터 ID5(950RPM), ID6(1000RPM) 와 신규모터 ID10, ID11 이 있는 게이트웨이 생성
 
-구역설정 창에서 기존모터/신규모터 IP 를 127.0.0.1, PORT 를 시뮬레이터 포트로 지정해 시험합니다.
+운영 프로그램은 PORT 502 로만 접속하므로 시뮬레이터도 502 에서 기다립니다. 구역설정 창에서
+기존모터/신규모터 IP 를 127.0.0.1 로 지정해 시험합니다. 여러 개를 띄울 때는 --host 127.0.0.2, 127.0.0.3 …
+처럼 주소를 달리합니다 (Windows 는 127.0.0.x 주소를 모두 이 PC 로 씀).
 """
 from __future__ import annotations
 
@@ -235,8 +237,8 @@ def _parse_old(text: str) -> Dict[int, int]:
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description="BLDC 모터 게이트웨이 시뮬레이터")
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=5020)
+    ap.add_argument("--host", default="127.0.0.1", help="기다릴 주소 (여러 개를 띄울 때 127.0.0.2 등으로 달리 함)")
+    ap.add_argument("--port", type=int, default=502, help="기다릴 PORT (운영 프로그램은 502 로만 접속)")
     ap.add_argument("--old", default="", help="기존모터 목록 'ID:RPM,ID:RPM'")
     ap.add_argument("--new", default="", help="신규모터 ID 목록 'ID,ID'")
     ap.add_argument("--ecblue", default="", help="기존모터제어 시험용 ECblue 'ID:아날로그RPM,...'")

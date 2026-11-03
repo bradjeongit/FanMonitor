@@ -28,12 +28,12 @@ def plant(tmp_path):
 
 @pytest.fixture
 def ui(root, plant, monkeypatch):
-    from motor_monitor.ui import dialogs, main_window
+    from motor_monitor.ui import dialogs, main_window, msgbox
     msgs = []
     answers = {"yes": True}
     monkeypatch.setattr(dialogs.BaseDialog, "error", lambda self, m, t: msgs.append((t, m)))
     monkeypatch.setattr(dialogs.BaseDialog, "ask", lambda self, m, t: answers["yes"])
-    monkeypatch.setattr(main_window.messagebox, "askyesno", lambda *a, **k: answers["yes"])
+    monkeypatch.setattr(msgbox, "ask_yes_no", lambda *a, **k: answers["yes"])
     win = main_window.MainWindow(root, plant)
     return win, dialogs, msgs, answers
 
@@ -66,8 +66,10 @@ def test_zone_dialog_validation_and_save(ui, plant):
     d.on_save()
     c = plant.configs["H1R1"]
     assert (c.source_ip, c.manual_rpm, c.source_manual) == ("172.27.0.82", 800, True)
+    assert (c.source_port, c.target_port) == (502, 502)                 # PORT 는 502 고정
+    assert not hasattr(d, "txtSPORT") and not hasattr(d, "txtTPORT")    # PORT 입력칸 없음
     assert win.zone_panels["H1R1"].lbl_source.cget("text") == "수동 > 800 RPM"
-    assert win.zone_panels["H1R1"].lbl_old_ip.cget("text") == "172.27.0.82/502"
+    assert win.zone_panels["H1R1"].lbl_old_ip.cget("text") == "172.27.0.82"   # PORT 표시 없음
 
 
 def test_zone_dialog_reference_mode(ui, plant):
@@ -169,8 +171,8 @@ def test_zone_start_stop_and_status_icons(ui, plant, monkeypatch):
     h.add_motor(1, MotorType.NEW_MOTOR, True, True, 400)
     m = h.get_motor("1_1")
     assert MotorListView.type_icon(m) == ("newmotor_limit", "신규모터(제한모드)")
-    m.status, m.had_err, m.err_note = MotorStatus.OK, True, "192.168.0.4:502 접속 실패"
-    assert MotorListView.status_icon(m) == ("bad_haderr", "통신 이상\n192.168.0.4:502 접속 실패")
+    m.status, m.had_err, m.err_note = MotorStatus.OK, True, "192.168.0.4 접속 실패"
+    assert MotorListView.status_icon(m) == ("bad_haderr", "통신 이상\n192.168.0.4 접속 실패")
     m.status = MotorStatus.READY                                  # 한 번도 응답하지 않은 채 이상
     assert MotorListView.status_icon(m)[0] == "bad_haderr"
     m.had_err, m.err_note = False, ""
@@ -182,9 +184,9 @@ def test_zone_start_stop_and_status_icons(ui, plant, monkeypatch):
 
 
 def test_monitoring_mode_screen(root, tmp_path, monkeypatch):
-    from motor_monitor.ui import main_window
+    from motor_monitor.ui import main_window, msgbox
     asked = []
-    monkeypatch.setattr(main_window.messagebox, "askyesno", lambda t, m, **k: (asked.append((t, m)), True)[1])
+    monkeypatch.setattr(msgbox, "ask_yes_no", lambda t, m, **k: (asked.append((t, m)), True)[1])
     plant = Plant(str(tmp_path / "Config.dll"), monitoring=True)
     plant.load()
     monkeypatch.setattr(plant, "start_line", lambda c: plant.houses[c]._stop.clear())
@@ -206,7 +208,7 @@ def test_ctrl_motor_add_and_modify(ui, plant):
     assert not d.ctrl_rows_visible
     d.motor_type_var.set(2); d._on_type()
     assert d.ctrl_rows_visible and not d.limit_row_visible
-    assert d.txtCIP.get() == "172.27.0.84" and d.txtCPORT.get() == "502"     # 기존모터 게이트웨이 기본값
+    assert d.txtCIP.get() == "172.27.0.84" and not hasattr(d, "txtCPORT")    # 기존모터 게이트웨이 IP, PORT 칸 없음
     assert d.lbl_id_range.cget("text") == "정수(1~249)"
     d.txtID.insert(0, "250")
     d.on_save()
@@ -214,7 +216,8 @@ def test_ctrl_motor_add_and_modify(ui, plant):
     d.txtID.delete(0, "end"); d.txtID.insert(0, "66")
     d.on_save()
     assert msgs[-1] == ("오류", "운전속도를 숫자 0~1100범위로 입력해주세요.")       # 운전속도는 꼭 입력
-    d.txtSETRPM.insert(0, "700")
+    d.txtSETRPM.insert(0, "700"); d._show_set_pct()
+    assert d.lbl_set_pct.cget("text") == "RPM (0~1100) = 63.6%"                # 1100 대비 %
     d.txtCIP.delete(0, "end"); d.txtCIP.insert(0, "172.27.0")
     d.on_save()
     assert msgs[-1] == ("오류", "기존모터제어 접속 IP가 올바른 형식이 아닙니다..")

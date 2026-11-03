@@ -36,7 +36,7 @@ class ConfigImport:
             cnt = {t: sum(1 for m in ms if m.mtype == t) for t in MotorType}
             src = (f"수동 {c.manual_rpm} RPM" if c.source_manual
                    else f"{get_house_name(c.source_line) or c.source_line} 기존모터 {c.source_id}")
-            out.append(f"{get_house_name(s)}: 기존 {c.source_ip}:{c.source_port} / 신규 {c.target_ip}:{c.target_port}"
+            out.append(f"{get_house_name(s)}: 기존 {c.source_ip} / 신규 {c.target_ip}"
                        f" / {src} / 기존모터 {cnt[MotorType.OLD_MOTOR]}, 신규모터 {cnt[MotorType.NEW_MOTOR]}, "
                        f"기존모터제어 {cnt[MotorType.OLD_CTRL]}")
         return out
@@ -202,11 +202,11 @@ class Plant:
                 return s
         return None
 
-    def reference_endpoint(self, code: str) -> Tuple[str, int, int]:
-        """구역 code 의 신규모터가 참조하는 기존모터의 (IP, PORT, ID).
-        수동 모드이거나 참조가 없으면 이 구역의 기존모터 통신장치와 ID 0."""
+    def reference_endpoint(self, code: str) -> Optional[Tuple[str, int, int]]:
+        """구역 code 의 신규모터가 참조하는 기존모터의 (통신장치 IP, PORT, ID). 수동 모드이거나 참조가 없으면 None.
+        기존모터제어 '구역 참조'가 자기 자신을 따라가지 않도록 확인할 때 씀."""
         cfg = self.configs[code]
         if not cfg.source_manual and cfg.source_line in self.configs:
             src = self.configs[cfg.source_line]
             return src.source_ip, src.source_port, cfg.source_id
-        return cfg.source_ip, cfg.source_port, 0
+        return None
