@@ -11,8 +11,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import TYPE_CHECKING, Callable, List, Optional, Sequence, Tuple
 
-from ..constants import (CTRL_MODE_MANUAL, CTRL_MODE_REF, MAX_RPM, MODBUS_PORT, MOTOR_ID_MAX, MOTOR_ID_MIN,
-                         MotorType, id_range, pct_text, rpm_to_pct)
+from ..constants import (CTRL_MODE_MANUAL, CTRL_MODE_REF, DEFAULT_CTRL_RPM, DEFAULT_MANUAL_RPM, MAX_RPM,
+                         MODBUS_PORT, MOTOR_ID_MAX, MOTOR_ID_MIN, MotorType, id_range, pct_text, rpm_to_pct)
 from ..helpers import check_integer, check_valid_ip, get_house_name
 from ..house import motor_key
 from . import msgbox
@@ -349,7 +349,10 @@ class LineSettingsDialog(BaseDialog):
         """운영 wHOUSE_Loaded"""
         cfg = self.plant.configs[self.house_code]
         self.lbl_house.configure(text=get_house_name(self.house_code))
-        for e, v in ((self.txtSIP, cfg.source_ip), (self.txtTIP, cfg.target_ip), (self.txtMRPM, cfg.manual_rpm)):
+        # 수동 RPM 칸: 참조 방식이면서 수동 RPM 을 한 번도 정하지 않은(0) 구역은 기본값 770 을 미리 넣어 둠.
+        # 수동 방식의 0 은 일부러 멈춘 것이므로 그대로 보여 줌
+        mrpm = cfg.manual_rpm if (cfg.source_manual or cfg.manual_rpm) else DEFAULT_MANUAL_RPM
+        for e, v in ((self.txtSIP, cfg.source_ip), (self.txtTIP, cfg.target_ip), (self.txtMRPM, mrpm)):
             e.delete(0, "end")
             e.insert(0, str(v))
         source_line = cfg.source_line or self.house_code
@@ -694,7 +697,8 @@ class MotorDialog(BaseDialog):
             cfg = self.plant.configs[self.house_code]       # 기존모터 게이트웨이 주소를 기본값으로
             self.txtCIP.insert(0, cfg.source_ip)
             self.lbl_zone_ref.configure(text=self.zone_reference_text())
-            self.ctrl_mode_var.set(CTRL_MODE_MANUAL)
+            self.ctrl_mode_var.set(CTRL_MODE_MANUAL)              # 기본: 수동 지정 70% (= 770 RPM)
+            self._set_text(self.txtSETRPM, DEFAULT_CTRL_RPM)
             self._on_ctrl_mode()
             self.after(50, self.txtID.focus_set)
         else:

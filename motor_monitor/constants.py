@@ -89,6 +89,13 @@ def pct_text(pct: float) -> str:
     return f"{round(pct, 1):g}%"
 
 
+# ---- 새 팬 기본 속도 (2.6.0: 신규모터는 수동 770 RPM, 기존모터제어는 수동 지정 70%) ----
+DEFAULT_MANUAL_RPM = 770                          # 구역 RPM 제어 소스 기본값: 수동 770 RPM
+                                                  #   (설정 파일에 값이 없는 구역, 구역설정 창의 수동 칸)
+DEFAULT_CTRL_PCT = 70                             # 기존모터제어 추가 창 기본 운전속도: 수동 지정 70%
+DEFAULT_CTRL_RPM = pct_to_rpm(DEFAULT_CTRL_PCT)   #   = 770 RPM (100% = MAX_RPM)
+
+
 def speed_within(actual: int, target: int) -> bool:
     """실제 속도가 설정 속도의 SPEED_TOLERANCE_PCT(1%) 이내인지 (화면 표시용)."""
     return abs(actual - target) <= abs(target) * SPEED_TOLERANCE_PCT / 100.0

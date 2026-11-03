@@ -15,8 +15,8 @@ import tempfile
 from dataclasses import dataclass, replace
 from typing import Dict, List, NamedTuple, Tuple
 
-from .constants import (CONFIG_FILE_NAME, CTRL_MODE_MANUAL, CTRL_MODE_REF, DEFAULT_IP_PREFIX, HOUSE_LINES,
-                        MODBUS_PORT, MotorType, pct_to_rpm)
+from .constants import (CONFIG_FILE_NAME, CTRL_MODE_MANUAL, CTRL_MODE_REF, DEFAULT_IP_PREFIX, DEFAULT_MANUAL_RPM,
+                        HOUSE_LINES, MODBUS_PORT, MotorType, pct_to_rpm)
 from .crypto3des import decrypt_config, encrypt_config
 
 log = logging.getLogger(__name__)
@@ -196,7 +196,8 @@ def _fixed_port(ini, key: str) -> int:
 
 
 def config_from_text(text: str) -> Tuple[Dict[str, LineConfig], Dict[str, List[MotorEntry]]]:
-    """INI 텍스트 -> (구역 설정, 구역별 모터 목록). 값이 없으면 운영 프로그램과 같은 기본값."""
+    """INI 텍스트 -> (구역 설정, 구역별 모터 목록). 값이 없으면 운영 프로그램과 같은 기본값
+    (단, 수동 RPM 기본값은 운영 프로그램의 0 대신 DEFAULT_MANUAL_RPM 770 - 새 구역도 수동 770 RPM 으로 시작)."""
     ini = parse_ini(text)
     configs: Dict[str, LineConfig] = {}
     motors: Dict[str, List[MotorEntry]] = {}
@@ -208,7 +209,7 @@ def config_from_text(text: str) -> Tuple[Dict[str, LineConfig], Dict[str, List[M
             target_ip=_ini_read(ini, SEC_LINE, f"{s}_TARGEIP", f"{DEFAULT_IP_PREFIX}{idx + 1}"),
             target_port=_fixed_port(ini, f"{s}_TARGEPORT"),
             source_manual=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_MANUAL", "1") != "0",
-            manual_rpm=_to_int(_ini_read(ini, SEC_LINE, f"{s}_MANUAL_RPM", "0")),
+            manual_rpm=_to_int(_ini_read(ini, SEC_LINE, f"{s}_MANUAL_RPM", str(DEFAULT_MANUAL_RPM))),
             source_line=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_LINE", ""),
             source_id=_to_int(_ini_read(ini, SEC_LINE, f"{s}_SOURCE_ID", "0")),
         )

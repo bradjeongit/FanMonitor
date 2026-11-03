@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 문서 버전 | 2.5.1 (프로그램 버전과 동일) |
+| 문서 버전 | 2.6.0 (프로그램 버전과 동일) |
 | 대상 프로그램 | `motor_monitor` 패키지 (실행: `run.py`) |
 | 기준 | **현재 운영 중인 실행파일 `BLDC_MOTOR_MONITOR.exe`** (VB.NET WPF)를 복원·분석한 동작 |
 | 설정 파일 | `Config.dll` — 운영 프로그램과 같은 파일을 그대로 사용 (7장) |
@@ -81,7 +81,7 @@
 | 2 | `ZONE-*-TITLE` | 구역 제목줄 | 글자 | `ZonePanel` 내부 Label | "n구역", 배경 `C-ZONE-TITLE`, 흰 굵은 글씨 |
 | 3 | `ZONE-*-DOT-OLD` / `ZONE-*-LBL-OLD` | 기존모터 통신상태 점 / IP | 점 / 글자 | `rec_SOURCE_NETSTATUS` / `lbl_old_ip` | 4.1절 색 규칙 / `172.27.0.82` 형식 (PORT 는 502 고정이라 표시 안 함). 잘리면 마우스를 올려 전체 문구 |
 | 4 | `ZONE-*-DOT-NEW` / `ZONE-*-LBL-NEW` | 신규모터 통신상태 점 / IP | 점 / 글자 | `rec_TARGET_NETSTATUS` / `lbl_new_ip` | 위와 같음 |
-| 5 | `ZONE-*-DOT-REF` / `ZONE-*-LBL-REF` | RPM 소스 상태 점 / 문구 | 점 / 글자 | `rec_SID_NETSTATUS` / `lbl_source` | 수동: `수동 > 800 RPM` / 참조: `1구역 > 2` (참조 구역 > 기존모터 ID) |
+| 5 | `ZONE-*-DOT-REF` / `ZONE-*-LBL-REF` | RPM 소스 상태 점 / 문구 | 점 / 글자 | `rec_SID_NETSTATUS` / `lbl_source` | 수동: `수동 > 770 RPM` / 참조: `2구역 > 66` (참조 구역 > 기존모터 ID) |
 | 6 | `ZONE-*-BTN-SET` | 설정 버튼(톱니) | 그림 버튼 | `ZonePanel.Btn_Settings` | 클릭 → `DLG-LINE`. 툴팁 "설정" |
 | 7 | `ZONE-*-BTN-ADD` | 추가 버튼(+) | 그림 버튼 | `ZonePanel.Btn_Add` | 클릭 → `DLG-MOTOR`(ADD). 툴팁 "추가" |
 | 8 | `ZONE-*-LIST-HDR` | 모터 목록 머리글 | 머리글 | `MotorListView.header` | 클릭 시 정렬 (3.2절) |
@@ -93,17 +93,17 @@
 |---|---|---|---|---|
 | `COL-TYPE` | 종류 열 (머리글 빈칸) | 32px | 아래 '종류 그림' 표 | 종류 |
 | `COL-ID` | ID 열 | 42px | 모터 ID (신규모터 1~30, 기존모터·기존모터제어 1~249) | ID |
-| `COL-STATUS` | 상태 열 | 나머지 | 상태 그림 + 오른쪽 정렬 문구 (아래 표) | 상태 코드 |
+| `COL-STATUS` | 상태 열 | 나머지 | 상태 그림 + 수동/참조 표시(`LIST-SRC`) + 오른쪽 정렬 문구 (아래 표) | 상태 코드 |
 
 **종류 그림 (`COL-TYPE`)**
 
 | 그림 | 뜻 (툴팁) |
 |---|---|
 | 청색 팬 (`oldmotor.png`) | 기존모터 |
-| 주황색 팬 (`newmotor.png`) | 신규모터 |
-| 주황색 팬 + 빨간 **L** (`newmotor_limit.png`) | 신규모터(제한모드) — 속도제한 사용 중 |
+| 개나리색 팬 (`newmotor.png`) | 신규모터 |
+| 개나리색 팬 + 빨간 **L** (`newmotor_limit.png`) | 신규모터(제한모드) — 속도제한 사용 중 |
 | 녹색 팬 + **C** (`oldmotor_ctrl.png`) | 기존모터제어 — 툴팁에 접속 IP, 운전속도 방식(`수동 지정 700 RPM (63.6%)` / `구역 참조 2구역 기존모터 66 (지금 770 RPM = 70%) → 설정 70% = 770 RPM`), 모터 지정값이 설정과 다르면 `모터 지정값 n RPM (설정과 다름)`, 모터 최고속도 대비 %(`모터 최고속도(h8) 1400 RPM: 설정 770 RPM = 최고속도의 55%`), 제어 문제 (4.5절) |
-| 붉은 팬 (`*_red.png`) | **속도 변경을 보냄**: 신규모터 RPM 설정(0x16)·기존모터제어 운전속도(h2)를 보내면 그 행의 팬 그림이 1초 동안 0.25초 붉게/0.25초 원래대로 → 0.5초 간격으로 두 번 깜빡 (`MotorListView.blink_on`, `BLINK_SEC`=1, `BLINK_PHASE`=0.25) |
+| 붉은 팬 (`*_red.png`) | **속도 변경을 보냄**: 신규모터 RPM 설정(0x16)·기존모터제어 운전속도(h2)를 보내면 그 행의 팬 그림을 붉은 그림으로, 행 바탕을 `C-LIST-SENT` 로 **1초 동안 유지**(깜빡이지 않음) 후 원래대로 (`MotorListView.sent_on`, `SENT_SEC`=1) |
 
 **상태 표시 (`COL-STATUS`)**
 
@@ -123,7 +123,17 @@
 - 처음: **ID 오름차순** (종류와 관계없이, 같은 ID 는 기존모터 → 신규모터 → 기존모터제어). 운영 프로그램은 '신규모터 먼저, 종류 안에서 ID 순' 이었음.
 - 다른 열을 클릭하면 그 열 기준 오름차순, 같은 열을 다시 클릭하면 오름/내림 전환. 정렬은 클릭·추가·삭제 시점에만 다시 계산.
 
-**행 음영**: 문제 상태(`Motor.has_problem` = 이상표시 / 이상 / 속도 미달, 사용 중인 모터만)인 행은 바탕을 `C-LIST-PROBLEM`(연한 붉은색)으로 칠함. 선택·마우스오버하면 더 진한 붉은색. 문제가 풀리면 원래대로 (`MotorListView.row_fill`).
+**행 음영**: 문제 상태(`Motor.has_problem` = 이상표시 / 이상 / 속도 미달, 사용 중인 모터만)인 행은 바탕을 `C-LIST-PROBLEM`(연한 붉은색)으로 칠함. 선택·마우스오버하면 더 진한 붉은색. 문제가 풀리면 원래대로 (`MotorListView.row_fill`). 속도를 보낸 1초 동안은 `C-LIST-SENT`(붉은색)가 우선.
+
+**수동/참조 표시 (`LIST-SRC`)**: 상태 그림 오른쪽(6px 띄움)에 28×15px 둥근 표시. 값은 `Motor.speed_src`(`HouseLine.get_list` 가 `house.speed_source` 로 채움). 표시 위에 마우스를 올리면 툴팁(`MotorListView.src_tip`).
+
+| 표시 | 신규모터 | 기존모터제어 | 색 |
+|---|---|---|---|
+| `수동` | 구역설정 RPM 제어 소스 = 수동 (`source_manual`) | 운전속도 = 수동 지정 (`ctrl_mode` manual) | `C-SRC-MANUAL` 파랑 |
+| `참조` | RPM 제어 소스 = 기존모터 (참조 회전수를 자동으로 따름) | 운전속도 = 구역 참조 | `C-SRC-REF` 초록 |
+| 없음 | 기존모터(읽기만), 사용 안 함(중지) | 사용 안 함(중지) | – |
+
+구역설정을 저장하면 목록을 바로 다시 그림 (`MainWindow.after_line_saved`).
 
 **기타**: 한 번 클릭 = 선택(하늘색), 더블클릭 = `DLG-MOTOR`(MOD), 목록 툴팁 "항목 더블클릭시 수정/삭제", 많으면 세로 스크롤.
 
@@ -143,7 +153,7 @@
 | 8 | `DLG-LINE-CB-ID` | 참조 모터 ID | 콤보 | `cb_ids` | "ID" + 선택 구역의 **기존모터** ID (등록 순서) |
 | 9 | `DLG-LINE-BTN-SAVE` | 저장 (Enter) | 버튼 | `BtnSave` | 검증 → 저장 → 메인 머리 영역 갱신 → 닫기 |
 | 10 | `DLG-LINE-BTN-CANCEL` | 취소 (Esc) | 버튼 | `BtnCancel` | 저장 없이 닫기 |
-| 11 | `DLG-LINE-TXT-MRPM` | 수동RPM값 | 입력칸 | `txtMRPM` (`ROW-MANUAL` = `manual_line`) | 현재 설정값 |
+| 11 | `DLG-LINE-TXT-MRPM` | 수동RPM값 | 입력칸 | `txtMRPM` (`ROW-MANUAL` = `manual_line`) | 현재 설정값. 참조 방식이면서 수동 RPM 이 0(정한 적 없음)이면 `P-DEFAULT-MANUAL-RPM` 770 을 미리 채움 (수동 방식의 0 은 일부러 멈춘 것이라 그대로) |
 | 12 | `DLG-LINE-LBL-RANGE` | 범위 안내 | 글자 | `lbl_rpm_range` | `정수(0~1100)` |
 
 **초기값**: 참조 구역이 비어 있으면 자기 구역을 선택. 참조 ID 가 목록에 있으면 그 ID 선택.
@@ -172,7 +182,7 @@
 | 5 | `DLG-MOTOR-TXT-ID` | 모터ID | 입력칸 | `txtID` | ADD | 옆에 종류별 범위(`lbl_id_range`): 신규모터 `정수(1~30)`, 기존모터·기존모터제어 `정수(1~249)` (`constants.id_range`) |
 | 16 | `DLG-MOTOR-TXT-CIP` | 기존모터제어 접속 IP | 입력칸 | `txtCIP` (`ROW-CTRL` = `ctrl_ip_row`) | 기존모터제어 | ADD: 이 구역의 기존모터 IP 가 기본값 / MOD: 수정 불가(읽기전용). PORT 입력칸 없음(502 고정, `-TXT-CPORT` 는 2.4.0 에서 없앰) |
 | 17 / 19 | `DLG-MOTOR-RB-CTRL-MANUAL` / `-RB-CTRL-REF` | 운전속도 방식: 수동 지정 / 구역 참조 | 라디오 | `rb_ctrl_manual`, `rb_ctrl_ref` (`ctrl_mode_var`) | 기존모터제어 | ADD 기본 수동 지정 / MOD 현재값. 구역 참조면 18 비활성 |
-| 18 | `DLG-MOTOR-TXT-SETRPM` / `-LBL-SETPCT` | 운전속도 (RPM, 수동 지정) / 1100 대비 % | 입력칸 / 글자 | `txtSETRPM`, `lbl_set_pct` (`ctrl_speed_row`) | 기존모터제어(수동) | 0~1100, **수동 지정이면 필수 입력**(빈칸이면 오류 — 실수로 0 이 되어 멈추는 것 방지). 이 속도로 계속 운전. 옆 글자 `RPM (0~1100) = 63.6%` (입력할 때마다 갱신) |
+| 18 | `DLG-MOTOR-TXT-SETRPM` / `-LBL-SETPCT` | 운전속도 (RPM, 수동 지정) / 1100 대비 % | 입력칸 / 글자 | `txtSETRPM`, `lbl_set_pct` (`ctrl_speed_row`) | 기존모터제어(수동) | 0~1100, **수동 지정이면 필수 입력**(빈칸이면 오류 — 실수로 0 이 되어 멈추는 것 방지). **추가 창 기본값 770 RPM(= 70%, `P-DEFAULT-CTRL-PCT`)**. 이 속도로 계속 운전. 옆 글자 `RPM (0~1100) = 70%` (입력할 때마다 갱신) |
 | 20 | `DLG-MOTOR-LBL-ZONEREF` | 구역 참조값 | 글자 | `lbl_zone_ref` (`ctrl_ref_row`), `zone_reference_text()` | 기존모터제어 | 이 구역 신규모터가 따르는 값의 출처·현재 값·% (`HouseLine.zone_reference()`): 예) `2구역 기존모터 66 → 지금 770 RPM = 70%`, `구역 수동 600 RPM → 지금 600 RPM = 54.5%`, 읽기 전이면 `→ 지금 값 없음 (…)`. 구역 참조가 아니면 흐리게. 아래 안내 `ctrl_ref_note` (참조 IP/PORT/ID 입력칸·[구역 참조] 버튼은 2.4.0 에서 없앰) |
 | – | `DLG-MOTOR-LBL-MOTORMAX` | 모터 최고속도 대비 % | 글자(파랑) | `lbl_motor_max` | 기존모터제어(MOD) | 구역 제어 중 h8 을 읽은 뒤에만 표시: `모터 최고속도(h8) 1400 RPM: 원하는 속도 770 RPM = 최고속도의 55%` (원하는 속도 = 수동 지정값 또는 구역 참조값). 최고속도보다 높으면 "(최고속도보다 높아 최고속도로 운전)" |
 | 6 / 7 | `DLG-MOTOR-RB-USE` / `-RB-NOUSE` | 사용여부 | 라디오 | `rb_use`, `rb_nouse` | 공통 | ADD: 기본 **사용** / MOD: 현재값 |
@@ -400,6 +410,8 @@
 | `P-WARN-SEC` | `NO_RESPONSE_WARN_SEC` | 60초 | 무응답 → 이상표시(빨간 !), 응답이 오면 해제. 기존모터제어 구역 참조값이 이 시간 넘게 없을 때도 이상표시 |
 | `P-CHECK-INTERVAL` | `CHECK_INTERVAL` | 30초 | 팬 속도 점검 주기 (모터마다 30초에 한 번 읽고, 목표와 다르면 목표를 보냄). kick 이면 바로 |
 | `P-SPEED-TOL` | `SPEED_TOLERANCE_PCT` (`speed_within`) | 1% | 화면 표시용: 실제 속도가 설정의 이 안이면 툴팁에 '오차 1% 이내' (제어에는 쓰지 않음) |
+| `P-DEFAULT-MANUAL-RPM` | `DEFAULT_MANUAL_RPM` | 770 | 새 팬 기본값: 설정 파일에 값이 없는 구역의 수동 RPM (RPM 제어 소스 기본은 수동), 구역설정 창 수동 칸 (3.3절) |
+| `P-DEFAULT-CTRL-PCT` | `DEFAULT_CTRL_PCT` / `DEFAULT_CTRL_RPM` | 70% / 770 RPM | 새 팬 기본값: 기존모터제어 추가 창의 운전속도 (수동 지정) |
 | `P-TIMEOUT-SEC` | `MOTOR_TIMEOUT_SEC` | 3600초 | 마지막 응답 후 → 이상 (운영 프로그램 값) |
 | `P-STATUS-INTERVAL` | `STATUS_UPDATE_INTERVAL` | 5초 | 상태 판정 주기 |
 | `P-NET-INTERVAL` | `NETWORK_UPDATE_INTERVAL` | 5초 | 상태 점 갱신 주기 |
@@ -430,9 +442,11 @@
 | `C-BTN-NORMAL` / `-SUBMIT` / `-ALERT` | `BUTTON_STYLES` | `#ecf0f1` / `#547791` / `#e74c3c` | 취소 / 저장·추가·수정 / 삭제 |
 | `C-LIST-SEL` / `C-LIST-HOVER` | `LIST_SELECTED` / `LIST_HOVER` | `#cce8ff` / `#e5f3ff` | 목록 선택/마우스오버 |
 | `C-LIST-PROBLEM` | `LIST_PROBLEM_BG` / `_HOVER` / `_SELECTED` | `#fde2e0` / `#fbcfca` / `#f5b5ae` | 문제 상태 행 음영 (보통/마우스오버/선택) |
+| `C-LIST-SENT` | `LIST_SENT_BG` | `#ff8f8f` | 속도 변경을 보낸 행 (1초). 붉은 팬 그림이 묻히지 않는 밝기 |
+| `C-SRC-MANUAL` / `C-SRC-REF` | `SRC_MANUAL_FG`·`_BG` / `SRC_REF_FG`·`_BG` | `#1f4e79`·`#dceaf7` / `#1e6b34`·`#dcf1e1` | 목록 수동/참조 표시 (글자·테두리 / 바탕) |
 | `C-STATUS-ERR` / `C-STATUS-DIM` | `STATUS_ERR_FG` / `STATUS_DIM_FG` | `#ff0000` / `#d3d3d3` | 이상 RPM / 중지·대기 글자 |
 
-그림 파일: `motor_monitor/assets/` (운영 프로그램과 같은 그림. `good`, `bad_haderr`, `bad_new`, `nouse_new`, `oldmotor`, `newmotor`, `newmotor_limit`, `settings`, `add`, `motor.ico`) + 신규 `oldmotor_ctrl`(기존모터제어, 파란 C) + 깜빡임용 붉은 그림 `oldmotor_red`, `newmotor_red`, `newmotor_limit_red`, `oldmotor_ctrl_red`.
+그림 파일: `motor_monitor/assets/` (운영 프로그램과 같은 그림. `good`, `bad_haderr`, `bad_new`, `nouse_new`, `oldmotor`, `newmotor`, `newmotor_limit`, `settings`, `add`, `motor.ico`) + 신규 `oldmotor_ctrl`(기존모터제어, 파란 C) + 속도 보냄 표시용 붉은 그림 `oldmotor_red`, `newmotor_red`, `newmotor_limit_red`, `oldmotor_ctrl_red`. `newmotor`·`newmotor_limit` 은 2.6.0 에서 주황 → 개나리색(색조 약 48~51°, L 은 빨강 그대로).
 
 ---
 
@@ -451,8 +465,8 @@ H1R1_SOURCE_IP=172.27.0.82      ; 기존모터 IP
 H1R1_SOURCE_PORT=502            ; 항상 502 (고정. 읽을 때 다른 값은 무시)
 H1R1_TARGEIP=172.27.0.111       ; 신규모터 IP (키 이름 오타는 호환용으로 유지)
 H1R1_TARGEPORT=502
-H1R1_SOURCE_MANUAL=0            ; 1=수동, 0=기존모터 참조
-H1R1_MANUAL_RPM=0
+H1R1_SOURCE_MANUAL=0            ; 1=수동, 0=기존모터 참조 (값이 없으면 1 = 수동)
+H1R1_MANUAL_RPM=0               ; 수동 RPM (값이 없으면 770 = P-DEFAULT-MANUAL-RPM, 운영 프로그램은 0)
 H1R1_SOURCE_LINE=H1R1           ; 참조 구역
 H1R1_SOURCE_ID=2                ; 참조 기존모터 ID
 ... (H1R2 ~ H1R8)
@@ -556,7 +570,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700,3@172.27.0.82:502=1=0=REF
 | `motor_monitor/ui/widgets.py` | 버튼, 상태 점, 툴팁, 모터 목록 | XAML 템플릿 |
 | `motor_monitor/ui/tools.py` | `SCR-ERRLOG` 에러 로그 창, `DLG-IMPORT-CFG`, `DLG-IMPORT-MINI` 설정 가져오기 창 | – (신규) |
 | `motor_monitor/ui/theme.py` | 색상·글꼴·그림 | XAML 색상값 |
-| `tests/` | 자동 시험. 운영 프로그램: `test_core.py`, `test_ui.py`, `test_zone_requests.py`(ID 범위, 구역 참조 %, 모니터링, 재접속 표시, 에러 로그, 가져오기), `test_followup_requests.py`(PORT 502 고정, 창 위치, 메시지 창), `test_speed_requests.py`(30초 점검·즉시 점검, 목표 그대로 보냄(보정 없음), 최고속도, 확인 창 키, 행 음영, 깜빡임) | – |
+| `tests/` | 자동 시험. 운영 프로그램: `test_core.py`, `test_ui.py`, `test_zone_requests.py`(ID 범위, 구역 참조 %, 모니터링, 재접속 표시, 에러 로그, 가져오기), `test_followup_requests.py`(PORT 502 고정, 창 위치, 메시지 창), `test_speed_requests.py`(30초 점검·즉시 점검, 목표 그대로 보냄(보정 없음), 최고속도, 확인 창 키, 행 음영, 속도 보냄 붉은 표시), `test_display_requests.py`(새 팬 기본값 770/70%, 개나리색 아이콘, 수동/참조 표시) | – |
 | `tools/` | 문서용 화면 캡처/번호 표시 | – |
 
 ---
@@ -579,6 +593,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700,3@172.27.0.82:502=1=0=REF
 
 | 버전 | 날짜 | 변경 내용 | 관련 ID |
 |---|---|---|---|
+| 2.6.0 | 2026-11-03 | **운영 프로그램 요청 5건**: ① 현장 Config.dll 을 모든 구역 수동 770 RPM 으로 수정(기존모터제어는 이미 수동 770 = 70%, 파일은 따로 전달) ② 새 팬 기본값: 설정 값이 없는 구역은 수동 770 RPM, 기존모터제어 추가 창은 수동 지정 770 RPM(70%), 구역설정 창은 정한 적 없는 수동 칸에 770 ④ 신규모터 팬 그림 주황 → 개나리색 ⑤ 속도를 보내면 깜빡임 대신 1초 동안 붉은 팬 그림 + 붉은 행 ⑥ 상태 칸에 수동/참조 표시 (구역설정 저장 시 바로 갱신) | `P-DEFAULT-MANUAL-RPM`, `P-DEFAULT-CTRL-PCT`, `C-LIST-SENT`, `C-SRC-*`, `LIST-SRC`, 3.2, 3.3 |
 | 2.5.1 | 2026-11-03 | **속도 보정 기능 삭제** (요청): 실제 속도로 지정값을 올리고 내리는 보정, 60초 무반응 시 보정 멈춤·속도 미달 알림, 보정값 기억(`speed_memory.json`)과 최초 신호, 1% 이내 설정 변화 무시를 삭제 → 목표 속도를 그대로 보냄(모터 값과 다를 때만, 2.5.0 이전과 같음). 유지: 30초 점검·즉시 점검, ID 순 정렬, 확인 창 키보드, 문제 행 음영, 속도 보냄 깜빡임, 모터 최고속도(h8) 대비 % 표시·알림 | `P-SPEED-STEP/STALL/MEMORY` 없앰, `P-SPEED-TOL`(표시용), 4.3, 4.5, 4.6 |
 | 2.5.0 | 2026-11-03 | **운영 프로그램 요청 7건 + 추가 2건**: ① 목록은 ID 순서가 기본 ② 확인 창을 키보드로: Enter·Space·Y = 예, Esc·N = 아니오 ③ 문제 상태 행 음영 ④ 설정 속도 1% 이내는 오차로 인정(설정이 1% 이내로 바뀌어도 다시 보내지 않음) ⑤ 느리면 지정값을 2~3%씩 올림(최대값 이하), 올려도 60초 동안 속도가 그대로면 더 보내지 않고 알림 ⑥ 오차 안에 든 지정값을 기억(`speed_memory.json`)해 다음 실행의 최초 신호로 ⑦ 팬 속도는 30초에 한 번 점검(설정 변경·제어 모드 전환 시 바로) / 추가: 기존모터제어 모터 최고속도(h8)를 읽어 최고속도 대비 % 계산·표시, 보정 상한·알림에 사용(속도는 절대 회전수 그대로 - 문서 근거 4.5절), 속도 변경을 보내면 팬 그림이 1초 동안 두 번 붉게 깜빡 | `P-CHECK-INTERVAL`, `P-SPEED-*`, `C-LIST-PROBLEM`, `DLG-MSG` 키, `DLG-MOTOR-LBL-MOTORMAX`, 3.2, 4.3, 4.5, 4.6, 7.1-1 |
 | 2.4.0 | 2026-11-03 | **운영 프로그램 후속 요청 4건**: ① 제어 PORT 를 502 로 고정(`P-MODBUS-PORT`) ② PORT 입력칸·표시 없앰 (구역설정, 기존모터제어, 머리 영역, 툴팁, 에러 로그, 가져오기 미리보기. 설정 파일의 다른 PORT 는 무시하고 502 로 저장) ③ 기존모터제어 참조 = **구역 참조**: 이 구역 신규모터가 따르는 값을 그대로 써서 1100 대비 % 를 구하고 같은 비율(1100 × %)로 지정, 참조 IP/PORT/ID 입력 없앰, 값 없음이 60초 넘으면 이상표시, 자기 자신 참조 금지 ④ 새 창(대화상자·에러 로그·확인/알림)은 **프로그램 창 안**에 뜸 — 모니터 기준 위치·자르기 없앰, Windows 메시지 상자 대신 `DLG-MSG` | `P-MODBUS-PORT`, `DLG-LINE-TXT-SIP/TIP`, `DLG-MOTOR-TXT-CIP`, `-RB-CTRL-REF`, `-LBL-SETPCT`, `-LBL-ZONEREF`, `DLG-MSG`, `MSG-MOTOR-21`, 없앤 ID: `DLG-LINE-TXT-SPORT/TPORT`, `DLG-MOTOR-TXT-CPORT`, `-TXT-RIP/RPORT/RID`, `-BTN-REFZONE`, `MSG-LINE-03~05/08~10`, `MSG-MOTOR-13/17~20`, 2장 '창 위치', 4.5, 7.1, 7.3 |

@@ -451,7 +451,7 @@ def test_ui_starts_monitoring_banner(ui):
 
 
 def test_ui_icons_colors(ui):
-    """기존모터 청색, 신규모터 주황색, 기존모터제어 녹색 (그림 가운데 근처 팬 날개 색)"""
+    """기존모터 청색, 신규모터 개나리색(2.6.0, 이전 주황색), 기존모터제어 녹색 (그림 가운데 근처 팬 날개 색)"""
     win, *_ = ui
     import colorsys
 
@@ -473,7 +473,8 @@ def test_ui_icons_colors(ui):
         return hs[len(hs) // 2]
 
     assert 190 <= hue("oldmotor") <= 230          # 청색
-    assert 15 <= hue("newmotor") <= 40            # 주황색
+    assert 44 <= hue("newmotor") <= 56            # 개나리색 (노랑, 주황 15~40° 아님)
+    assert 44 <= hue("newmotor_limit") <= 56
     assert 110 <= hue("oldmotor_ctrl") <= 160     # 녹색
 
 

@@ -61,9 +61,10 @@ for code, (olds, news) in ZONES.items():
         lim = LIMITS.get((code, mid))
         h.add_motor(mid, MotorType.NEW_MOTOR, True, lim is not None, lim or 0)
     line, sid = REF[code]
+    # 현장 설정(2.6.0)처럼 구역은 수동 770 RPM, 2구역만 기존모터 66 참조 (목록의 '수동'/'참조' 표시 예시)
     plant.configs[code] = plant.configs[code].copy(
         source_ip=og.host, source_port=og.port, target_ip=ng.host, target_port=ng.port,
-        source_manual=False, source_line=line, source_id=sid)
+        source_manual=code != "H1R2", manual_rpm=770, source_line=line, source_id=sid)
 plant.houses["H1R8"].add_motor(9, MotorType.NEW_MOTOR, False)     # 중지 예시
 # 기존모터제어 예시: 1구역 ECblue 10번은 700 RPM 수동 지정,
 # 2구역 ECblue 12번은 구역 참조(2구역 신규모터가 따르는 2구역 기존모터 66 의 값을 1100 대비 % 로 같은 비율)
@@ -195,8 +196,7 @@ def motor_add_ctrl():
     d.motor_type_var.set(2)
     d._on_type()
     d.txtID.insert(0, "14")
-    d.txtSETRPM.insert(0, "700")
-    d._show_set_pct()
+    d._show_set_pct()                     # 운전속도는 기본값 그대로 (수동 지정 770 RPM = 70%)
 
     def m():
         crop_dialog("dlg_motor_add_ctrl", d)

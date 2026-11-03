@@ -214,6 +214,9 @@ def test_ctrl_motor_add_and_modify(ui, plant):
     d.on_save()
     assert msgs[-1] == ("오류", "모터ID값은 숫자로 1-249범위로 입력하셔야 합니다.")
     d.txtID.delete(0, "end"); d.txtID.insert(0, "66")
+    assert d.ctrl_mode_var.get() == "manual" and d.txtSETRPM.get() == "770"      # 기본: 수동 지정 70% (2.6.0)
+    assert d.lbl_set_pct.cget("text") == "RPM (0~1100) = 70%"
+    d.txtSETRPM.delete(0, "end")
     d.on_save()
     assert msgs[-1] == ("오류", "운전속도를 숫자 0~1100범위로 입력해주세요.")       # 운전속도는 꼭 입력
     d.txtSETRPM.insert(0, "700"); d._show_set_pct()
