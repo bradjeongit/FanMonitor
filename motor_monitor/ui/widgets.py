@@ -351,8 +351,8 @@ class MotorListView(tk.Frame):
         """붉은 표시가 끝나는 때에 맞춰 다시 그리기 예약."""
         now = self._clock()
         for k, st in list(self._sent_start.items()):
-            if now - st >= self.SENT_SEC:
-                del self._sent_start[k]
+            if not 0 <= now - st < self.SENT_SEC:    # 끝난 표시, 시작이 '지금보다 뒤'인 표시(시계가 바뀜)는 지움
+                del self._sent_start[k]               #   (sent_on 과 같은 조건 - 다시 그리기 예약이 남지 않게)
         if self._sent_job is not None:
             try:
                 self.after_cancel(self._sent_job)

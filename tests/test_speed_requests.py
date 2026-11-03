@@ -405,6 +405,15 @@ def test_sent_motor_icon_and_row_turn_red_for_one_second(shown_root):
     now[0] = 201.2
     lv._redraw()
     assert lv.drawn_icons == ["oldmotor_ctrl"] and _row_fills(lv) == {"row0": T.LIST_PROBLEM_BG}
+    # 시작 시각이 지금보다 뒤인 표시(시계가 바뀜)는 붉게 그리지 않고 바로 지움 -> 다시 그리기 예약이 남지 않음.
+    # (Windows 의 time.monotonic 은 부팅 후 경과 시간이라, 막 켠 PC 에서는 위의 가짜 시각 200 보다 작을 수 있음)
+    lv.set_rows([bad, Motor(9, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, sent_at=time.monotonic())])
+    assert lv._sent_job is not None                                   # 새로 보낸 9번: 1초 뒤 다시 그리기 예약
+    now[0] = 150.0
+    lv._schedule_sent()
+    assert not lv._sent_start and lv._sent_job is None
+    lv._redraw()
+    assert lv.drawn_icons == ["oldmotor_ctrl", "newmotor"]
     # 실제 시계로 1초 동안 붉었다가 저절로 원래대로 돌아옴
     lv._clock = time.monotonic
     m2 = Motor(7, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, rpm=800, sent_at=time.monotonic())
