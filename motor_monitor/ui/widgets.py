@@ -5,8 +5,7 @@ import time
 import tkinter as tk
 from typing import Callable, Dict, List, Optional
 
-from ..constants import CTRL_MODE_REF, MotorStatus, MotorType, pct_text, rpm_to_pct
-from ..speedtrim import within
+from ..constants import CTRL_MODE_REF, MotorStatus, MotorType, pct_text, rpm_to_pct, speed_within
 from ..house import Motor
 from . import theme as T
 
@@ -249,7 +248,7 @@ class MotorListView(tk.Frame):
         if m.mtype == MotorType.OLD_MOTOR or m.target_rpm is None or m.status != MotorStatus.OK:
             return ""
         cmd = "-" if m.cmd_rpm is None else str(m.cmd_rpm)
-        ok = " (오차 1% 이내)" if m.target_rpm > 0 and within(m.rpm, m.target_rpm) else ""
+        ok = " (오차 1% 이내)" if m.target_rpm > 0 and speed_within(m.rpm, m.target_rpm) else ""
         return f"\n설정 {m.target_rpm} · 지정 {cmd} · 실제 {m.rpm} RPM{ok}"
 
     @staticmethod
@@ -269,7 +268,7 @@ class MotorListView(tk.Frame):
                 speed = f"수동 지정 {m.set_rpm} RPM ({pct_text(rpm_to_pct(m.set_rpm))})"
             tip = f"기존모터제어 {m.ip}\n운전속도: {speed}"
             if m.target_rpm is not None and m.cmd_rpm is not None and m.cmd_rpm != m.target_rpm:
-                tip += f"\n보정: 지정값 {m.cmd_rpm} RPM (설정보다 {m.cmd_rpm - m.target_rpm:+d})"
+                tip += f"\n모터 지정값 {m.cmd_rpm} RPM (설정과 다름)"
             if m.max_rpm > 0:
                 tip += f"\n모터 최고속도(h8) {m.max_rpm} RPM"
                 if m.target_rpm:
