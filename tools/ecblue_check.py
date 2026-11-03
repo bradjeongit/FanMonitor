@@ -200,6 +200,7 @@ def stage_control(ip: str, port: int, ids: List[int], rpm: int, seconds: int, re
     cfg = os.path.join(tempfile.mkdtemp(prefix="ecblue_check_"), "Config.dll")   # 운영 Config.dll 은 건드리지 않음
     plant = Plant(cfg, monitoring=False)
     plant.load()
+    C.CHECK_INTERVAL = interval        # 점검 도구: 운영 프로그램의 30초 점검 대신 표시 간격마다 점검
     h = plant.houses["H1R1"]
     for uid in ids:
         h.add_motor(uid, MotorType.OLD_CTRL, True, ip=ip, port=port, set_rpm=rpm)

@@ -25,11 +25,14 @@ log = logging.getLogger("motor_monitor.simulator")
 
 class FakeGateway:
     """기존모터(FC04 레지스터14)와 신규모터(FC03 0x00~0x08, 0x13~0x19 / FC06)를 흉내냄.
-    신규모터 현재 RPM(0x05)은 동작(0x14=1) 중이면 설정 RPM(0x16)을 따라가고, 정지면 0."""
+    신규모터 현재 RPM(0x05)은 동작(0x14=1) 중이면 설정 RPM(0x16) x 배율(new_gain, 기본 1 - 설정보다 느리게 도는
+    팬 시험용)을 따라가고, 정지면 0. new_max 를 주면 그 이상으로는 돌지 않음."""
 
     def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
         self.old_rpm: Dict[int, int] = {}
         self.new_regs: Dict[int, Dict[int, int]] = {}
+        self.new_gain: Dict[int, float] = {}    # 신규모터 실제/설정 배율 (없으면 1)
+        self.new_max: Dict[int, int] = {}       # 신규모터가 낼 수 있는 최고 회전수 (없으면 제한 없음)
         self.writes: List[tuple] = []          # (unit_id, reg, value) 기록
         self.ecb: Dict[int, dict] = {}         # ECblue 기존모터 (기존모터제어 시험용)
         self.requests: List[bytes] = []
@@ -134,7 +137,10 @@ class FakeGateway:
             elif fc == modbus.FC_READ_HOLDING and uid in self.new_regs:
                 regs = self.new_regs[uid]
                 running = regs[modbus.NEW_REG_STARTSTOP] == 1
-                regs[modbus.NEW_REG_ACTUAL_RPM] = regs[modbus.NEW_REG_RPM] if running else 0
+                actual = round(regs[modbus.NEW_REG_RPM] * self.new_gain.get(uid, 1.0))
+                if uid in self.new_max:
+                    actual = min(actual, self.new_max[uid])
+                regs[modbus.NEW_REG_ACTUAL_RPM] = actual if running else 0
                 values = [regs.get(addr + i, 0) for i in range(val)]
                 pdu = struct.pack(">BB", fc, val * 2) + b"".join(struct.pack(">H", v) for v in values)
             elif fc == modbus.FC_WRITE_SINGLE and uid in self.new_regs:
@@ -156,7 +162,7 @@ class FakeGateway:
         if d.get("wd_tripped") and h[17] & 0xFF in (2, 3):
             spd = h[5]                                   # 통신 끊김: 정속 1 (Set Intern1, h5)
         elif modbus.ecb_mode_ok(h[4]):
-            spd = h[2] if h[1] & 1 else 0
+            spd = round(h[2] * d.get("gain", 1.0)) if h[1] & 1 else 0   # gain: 지정보다 느리게 도는 팬 시험용
         else:
             spd = d["analog"]
         return min(spd, h[8]) if h[8] > 0 else spd      # 최고속도(h8) 제한

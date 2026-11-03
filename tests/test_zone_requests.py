@@ -21,7 +21,7 @@ from motor_monitor.simulator import FakeGateway
 @pytest.fixture
 def fast(monkeypatch):
     for name, val in [("SEND_INTERVAL", 0.01), ("CYCLE_INTERVAL", 0.05), ("RECONNECT_DELAY", 0.2),
-                      ("ERROR_RETRY_DELAY", 0.05)]:
+                      ("ERROR_RETRY_DELAY", 0.05), ("CHECK_INTERVAL", 0.15)]:
         monkeypatch.setattr(C, name, val)
 
 

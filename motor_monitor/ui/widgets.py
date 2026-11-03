@@ -1,10 +1,12 @@
 """공용 화면 위젯 (둥근 버튼, 상태 점, 툴팁, 모터 목록 등)."""
 from __future__ import annotations
 
+import time
 import tkinter as tk
-from typing import Callable, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from ..constants import CTRL_MODE_REF, MotorStatus, MotorType, pct_text, rpm_to_pct
+from ..speedtrim import within
 from ..house import Motor
 from . import theme as T
 
@@ -218,21 +220,37 @@ class MotorListView(tk.Frame):
     COLUMNS = ("", "ID", "상태")
     SORT_KEYS = {"": "MTYPE", "ID": "ID", "상태": "STATUS"}
     STATUS_ICON_W = 22
+    # 속도 변경을 보내면 팬 그림을 1초 동안 0.25초 붉게 / 0.25초 원래대로 -> 0.5초 간격으로 한 번씩, 1초에 두 번 깜빡
+    BLINK_SEC = 1.0
+    BLINK_PHASE = 0.25
+    _clock = staticmethod(time.monotonic)
 
     @staticmethod
     def status_icon(m: Motor):
         """상태 그림 이름과 툴팁 (운영 StatusTemplate). 대기는 그림 없음.
         이상표시(접속 실패·무응답·제어 문제)는 다시 응답이 오면 바로 정상 그림으로 돌아감."""
         why = f"\n{m.err_note}" if m.err_note else ""
+        speed = MotorListView.speed_text(m)
         if m.status == MotorStatus.ERR:
             return "bad_new", "이상 (오래 응답 없음)" + why
         if m.status == MotorStatus.NOTUSE:
             return "nouse_new", "중지(사용안함)"
         if m.had_err:
             return "bad_haderr", ("응답 대기 중 이상" if m.status == MotorStatus.READY else "통신 이상") + why
+        if m.speed_note:
+            return "bad_haderr", f"속도 미달\n{m.speed_note}" + speed
         if m.status == MotorStatus.OK:
-            return "good", "정상"
+            return "good", "정상" + speed
         return None, ""
+
+    @staticmethod
+    def speed_text(m: Motor) -> str:
+        """설정·지정·실제 속도 한 줄 (신규모터·기존모터제어, 설정 속도를 알 때만). 예: '설정 770 · 지정 785 · 실제 768 RPM'"""
+        if m.mtype == MotorType.OLD_MOTOR or m.target_rpm is None or m.status != MotorStatus.OK:
+            return ""
+        cmd = "-" if m.cmd_rpm is None else str(m.cmd_rpm)
+        ok = " (오차 1% 이내)" if m.target_rpm > 0 and within(m.rpm, m.target_rpm) else ""
+        return f"\n설정 {m.target_rpm} · 지정 {cmd} · 실제 {m.rpm} RPM{ok}"
 
     @staticmethod
     def type_icon(m: Motor):
@@ -244,12 +262,18 @@ class MotorListView(tk.Frame):
                 src = f" {m.ref_desc}" if m.ref_desc else ""
                 now = ("값 없음" if m.ref_rpm is None
                        else f"{m.ref_rpm} RPM = {pct_text(rpm_to_pct(m.ref_rpm))}")
+                t = m.target_rpm if m.target_rpm is not None else m.ctrl_target
                 speed = (f"구역 참조{src} (지금 {now})"
-                         + ("" if m.ctrl_target is None
-                            else f" → 지정 {pct_text(rpm_to_pct(m.ctrl_target))} = {m.ctrl_target} RPM"))
+                         + ("" if t is None else f" → 설정 {pct_text(rpm_to_pct(t))} = {t} RPM"))
             else:
                 speed = f"수동 지정 {m.set_rpm} RPM ({pct_text(rpm_to_pct(m.set_rpm))})"
             tip = f"기존모터제어 {m.ip}\n운전속도: {speed}"
+            if m.target_rpm is not None and m.cmd_rpm is not None and m.cmd_rpm != m.target_rpm:
+                tip += f"\n보정: 지정값 {m.cmd_rpm} RPM (설정보다 {m.cmd_rpm - m.target_rpm:+d})"
+            if m.max_rpm > 0:
+                tip += f"\n모터 최고속도(h8) {m.max_rpm} RPM"
+                if m.target_rpm:
+                    tip += f": 설정 {m.target_rpm} RPM = 최고속도의 {pct_text(m.target_rpm * 100 / m.max_rpm)}"
             return "oldmotor_ctrl", tip + (f"\n{m.ctrl_note}" if m.ctrl_note else "")
         if m.use_limit:
             return "newmotor_limit", "신규모터(제한모드)"
@@ -267,6 +291,10 @@ class MotorListView(tk.Frame):
         self._hover_idx: Optional[int] = None
         self._hover_hdr: Optional[int] = None
         self._width = 200
+        self._blink_start: Dict[str, float] = {}   # 모터키 -> 깜빡임 시작 시각
+        self._seen_sent: Dict[str, float] = {}     # 모터키 -> 마지막으로 본 '속도 보낸 시각'
+        self._blink_job = None
+        self.drawn_icons: List[str] = []           # 마지막으로 그린 종류 그림 이름 (시험용)
 
         inner = tk.Frame(self, bg=T.WHITE)
         inner.pack(fill="both", expand=True)
@@ -292,12 +320,63 @@ class MotorListView(tk.Frame):
         self.header.bind("<Leave>", lambda e: self._set_hdr_hover(None))
         self.header.bind("<Button-1>", self._on_hdr_click)
         Tooltip(self.canvas, self._tooltip_text)
+        self.bind("<Destroy>", self._on_destroy, add="+")
         self._draw_header()
 
     # --- 데이터 ---
     def set_rows(self, rows: List[Motor]) -> None:
+        now = self._clock()
+        for m in rows:
+            if m.sent_at is not None and self._seen_sent.get(m.key) != m.sent_at:
+                self._seen_sent[m.key] = m.sent_at
+                if time.monotonic() - m.sent_at < 2.0:        # 방금 속도 변경을 보낸 모터만 깜빡임
+                    self._blink_start[m.key] = now
         self._rows = rows
         self._redraw()
+        self._schedule_blink()
+
+    # --- 깜빡임 (속도 변경을 보낼 때) ---
+    def blink_on(self, key: str, now: Optional[float] = None) -> bool:
+        """지금 붉게 보일 차례인지: 시작 후 0~0.25초, 0.5~0.75초."""
+        start = self._blink_start.get(key)
+        if start is None:
+            return False
+        el = (self._clock() if now is None else now) - start
+        if not 0 <= el < self.BLINK_SEC:
+            return False
+        return int(el / self.BLINK_PHASE) % 2 == 0
+
+    def _schedule_blink(self) -> None:
+        now = self._clock()
+        for k, st in list(self._blink_start.items()):
+            if now - st >= self.BLINK_SEC:
+                del self._blink_start[k]
+        if self._blink_job is not None:
+            try:
+                self.after_cancel(self._blink_job)
+            except tk.TclError:
+                pass
+            self._blink_job = None
+        if not self._blink_start:
+            return
+        nxt = min(st + self.BLINK_PHASE * (int((now - st) / self.BLINK_PHASE) + 1)
+                  for st in self._blink_start.values())
+        self._blink_job = self.after(max(10, int((nxt - now) * 1000) + 5), self._blink_tick)
+
+    def _blink_tick(self) -> None:
+        self._blink_job = None
+        if not self.winfo_exists():
+            return
+        self._redraw()
+        self._schedule_blink()
+
+    def _on_destroy(self, e) -> None:
+        if e.widget is self and self._blink_job is not None:
+            try:
+                self.after_cancel(self._blink_job)
+            except tk.TclError:
+                pass
+            self._blink_job = None
 
     @property
     def rows(self) -> List[Motor]:
@@ -346,18 +425,33 @@ class MotorListView(tk.Frame):
         c.delete("all")
         x = self._col_x()
         w = self._width
+        now = self._clock()
+        self.drawn_icons = []
         for i, m in enumerate(self._rows):
             y = i * self.ROW_H
-            if m.key == self._selected_key:
-                c.create_rectangle(0, y, w, y + self.ROW_H - 1, fill=T.LIST_SELECTED, outline="")
-            elif i == self._hover_idx:
-                c.create_rectangle(0, y, w, y + self.ROW_H - 1, fill=T.LIST_HOVER, outline="")
+            fill = self.row_fill(m, m.key == self._selected_key, i == self._hover_idx)
+            if fill:
+                c.create_rectangle(0, y, w, y + self.ROW_H - 1, fill=fill, outline="", tags=("rowbg", f"row{i}"))
             cy = y + self.ROW_H // 2
             tname, _ = self.type_icon(m)
+            if self.blink_on(m.key, now):
+                tname += "_red"                       # 속도 변경을 보냄: 붉은 팬 그림
+            self.drawn_icons.append(tname)
             c.create_image((x[0] + x[1]) // 2, cy, image=self.images.get(tname, 20))
             c.create_text((x[1] + x[2]) // 2, cy, text=str(m.id), font=T.font(9))
             self._draw_status(c, m, x[2], x[3], cy)
         c.configure(scrollregion=(0, 0, w, max(len(self._rows) * self.ROW_H, 1)))
+
+    @staticmethod
+    def row_fill(m: Motor, selected: bool, hover: bool) -> Optional[str]:
+        """행 바탕색. 문제 상태(이상표시·이상·속도 미달)인 행은 늘 붉은 음영 (선택·마우스오버는 더 진하게)."""
+        if m.has_problem:
+            return T.LIST_PROBLEM_SELECTED if selected else (T.LIST_PROBLEM_HOVER if hover else T.LIST_PROBLEM_BG)
+        if selected:
+            return T.LIST_SELECTED
+        if hover:
+            return T.LIST_HOVER
+        return None
 
     def _draw_status(self, c: tk.Canvas, m: Motor, x1: int, x2: int, cy: int) -> None:
         """운영 StatusTemplate: 정상/이상은 RPM 숫자(이상은 빨강 굵게), 중지/대기는 연회색 굵은 글씨."""

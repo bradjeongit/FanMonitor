@@ -149,12 +149,17 @@ def _house(tmp_path, code="H1R1"):
     return plant, plant.houses[code]
 
 
-def test_sorting_matches_production(tmp_path):
+def test_sorting_default_id_and_header_clicks(tmp_path):
     _, h = _house(tmp_path)
     for mid, t in [(126, 0), (1, 1), (2, 0), (9, 1)]:
         h.add_motor(mid, MotorType(t), True)
     ids = lambda: [(int(m.mtype), m.id) for m in h.get_list()]
-    assert ids() == [(1, 1), (1, 9), (0, 2), (0, 126)]   # 기본: 신규 먼저, 같은 종류는 ID 오름차순
+    assert ids() == [(1, 1), (0, 2), (1, 9), (0, 126)]   # 기본: ID 오름차순 (종류와 관계없이)
+    h.add_motor(2, MotorType.OLD_CTRL, True, ip="10.0.0.1")
+    h.add_motor(2, MotorType.NEW_MOTOR, True)
+    assert ids()[1:4] == [(0, 2), (1, 2), (2, 2)]          # 같은 ID 는 기존모터 → 신규모터 → 기존모터제어
+    h.remove_motor("2_2@10.0.0.1:502")
+    h.remove_motor("1_2")
     h.sort("MTYPE")
     assert ids() == [(0, 2), (0, 126), (1, 1), (1, 9)]
     h.sort("ID")
@@ -227,7 +232,7 @@ def test_limit_and_reference(tmp_path):
 @pytest.fixture
 def fast(monkeypatch):
     for name, val in [("SEND_INTERVAL", 0.01), ("CYCLE_INTERVAL", 0.05), ("RECONNECT_DELAY", 0.2),
-                      ("ERROR_RETRY_DELAY", 0.05)]:
+                      ("ERROR_RETRY_DELAY", 0.05), ("CHECK_INTERVAL", 0.15)]:
         monkeypatch.setattr(C, name, val)
 
 

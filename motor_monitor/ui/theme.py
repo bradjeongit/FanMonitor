@@ -44,6 +44,9 @@ SEPARATOR = "#e0e0e0"
 
 LIST_HOVER = "#e5f3ff"
 LIST_SELECTED = "#cce8ff"
+LIST_PROBLEM_BG = "#fde2e0"     # 문제 상태(이상표시·이상·속도 미달) 행 음영
+LIST_PROBLEM_HOVER = "#fbcfca"  # 〃 마우스오버
+LIST_PROBLEM_SELECTED = "#f5b5ae"  # 〃 선택
 LIST_HEADER_BG = "#ffffff"
 LIST_HEADER_HOVER = "#d9ebf9"
 LIST_HEADER_LINE = "#e5e5e5"
