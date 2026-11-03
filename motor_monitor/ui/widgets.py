@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from typing import Callable, List, Optional
 
-from ..constants import MotorStatus, MotorType
+from ..constants import CTRL_MODE_REF, MotorStatus, MotorType, pct_text, rpm_to_pct
 from ..house import Motor
 from . import theme as T
 
@@ -221,13 +221,17 @@ class MotorListView(tk.Frame):
 
     @staticmethod
     def status_icon(m: Motor):
-        """상태 그림 이름과 툴팁 (운영 StatusTemplate). 대기는 그림 없음."""
-        if m.status == MotorStatus.OK:
-            return ("bad_haderr", "정상(이상기록있음)") if m.had_err else ("good", "정상")
+        """상태 그림 이름과 툴팁 (운영 StatusTemplate). 대기는 그림 없음.
+        이상표시(접속 실패·무응답·제어 문제)는 다시 응답이 오면 바로 정상 그림으로 돌아감."""
+        why = f"\n{m.err_note}" if m.err_note else ""
         if m.status == MotorStatus.ERR:
-            return "bad_new", "이상"
+            return "bad_new", "이상 (오래 응답 없음)" + why
         if m.status == MotorStatus.NOTUSE:
             return "nouse_new", "중지(사용안함)"
+        if m.had_err:
+            return "bad_haderr", ("응답 대기 중 이상" if m.status == MotorStatus.READY else "통신 이상") + why
+        if m.status == MotorStatus.OK:
+            return "good", "정상"
         return None, ""
 
     @staticmethod
@@ -236,7 +240,16 @@ class MotorListView(tk.Frame):
         if m.mtype == MotorType.OLD_MOTOR:
             return "oldmotor", "기존모터"
         if m.mtype == MotorType.OLD_CTRL:
-            tip = f"기존모터제어 {m.ip}:{m.port} / 지정속도 {m.set_rpm} RPM"
+            if m.ctrl_mode == CTRL_MODE_REF:
+                src = f" {m.ref_desc}" if m.ref_desc else ""
+                now = ("값 없음" if m.ref_rpm is None
+                       else f"{m.ref_rpm} RPM = {pct_text(rpm_to_pct(m.ref_rpm))}")
+                speed = (f"구역 참조{src} (지금 {now})"
+                         + ("" if m.ctrl_target is None
+                            else f" → 지정 {pct_text(rpm_to_pct(m.ctrl_target))} = {m.ctrl_target} RPM"))
+            else:
+                speed = f"수동 지정 {m.set_rpm} RPM ({pct_text(rpm_to_pct(m.set_rpm))})"
+            tip = f"기존모터제어 {m.ip}\n운전속도: {speed}"
             return "oldmotor_ctrl", tip + (f"\n{m.ctrl_note}" if m.ctrl_note else "")
         if m.use_limit:
             return "newmotor_limit", "신규모터(제한모드)"

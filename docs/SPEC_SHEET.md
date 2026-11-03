@@ -6,7 +6,7 @@
 
 | 항목 | 내용 |
 |---|---|
-| 문서 버전 | 2.3.0 (프로그램 버전과 동일) |
+| 문서 버전 | 2.4.0 (프로그램 버전과 동일) |
 | 대상 프로그램 | `motor_monitor` 패키지 (실행: `run.py`) |
 | 기준 | **현재 운영 중인 실행파일 `BLDC_MOTOR_MONITOR.exe`** (VB.NET WPF)를 복원·분석한 동작 |
 | 설정 파일 | `Config.dll` — 운영 프로그램과 같은 파일을 그대로 사용 (7장) |
@@ -25,7 +25,7 @@
 | `TST-` | 기존모터 시험기(`SCR-TESTER`) 구성요소 (모터별은 `TST-{ID}-`, 공통은 `TST-*-`) | `TST-*-BTN-CONN` |
 | `DLG-` | 대화상자(팝업 창) | `DLG-LINE`, `DLG-MOTOR` |
 | `ZONE-` | 구역 패널 (n = 1~8) | `ZONE-3` (3구역) |
-| `MSG-` | 메시지 창(확인/오류 알림) | `MSG-LINE-02` |
+| `MSG-` | 메시지(확인/오류 알림) 문구. 프로그램 창 안에 뜨는 메시지 창 `DLG-MSG` 로 표시 | `MSG-LINE-02` |
 | `P-` | 동작 파라미터(설정 상수) | `P-WARN-SEC` |
 | `C-` | 색상 | `C-NET-OK` |
 
@@ -46,11 +46,17 @@
 
 | ID | 이름 | 여는 방법 | 크기 | 코드 (파일 / 클래스) | 운영 프로그램 |
 |---|---|---|---|---|---|
-| `SCR-MAIN` | 메인 화면 (1~8구역 가로 배치). 실행 모드: **제어 모드**(기본) / **모니터링 모드**(4.4절) | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1500×450 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow` |
+| `SCR-MAIN` | 메인 화면 (1~8구역 가로 배치). 실행 모드: **모니터링 모드**(항상 이 모드로 시작, 4.4절) / **제어 모드** | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1500×450 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow` |
 | `SCR-TESTER` | 기존모터 시험기 (별도 프로그램, 3.6절) | `ECBLUE_TESTER.exe` / `ecblue_tester.bat` / `python tools/ecblue_tester.py` | 620×520, 최소 460×470 | `tools/ecblue_tester.py` / `TesterApp`, `MotorPanel` | – (신규) |
 | `DLG-LINE` | 구역설정 창 | `ZONE-*-BTN-SET` 클릭 | 400×300 고정, 모달 | `motor_monitor/ui/dialogs.py` / `LineSettingsDialog` | `wHOUSE` |
-| `DLG-MOTOR` (ADD) | 모터 추가 창 | `ZONE-*-BTN-ADD` 클릭 | 520×340 고정, 모달 (기존모터제어 입력줄 때문에 운영 프로그램 400×300 보다 큼) | `dialogs.py` / `MotorDialog(mode="ADD")` | `wMotor` |
-| `DLG-MOTOR` (MOD) | 모터 수정/삭제 창 | `ZONE-*-LIST` 항목 더블클릭 | 520×340 고정, 모달 | `dialogs.py` / `MotorDialog(mode="MOD")` | `wMotor` |
+| `DLG-MOTOR` (ADD) | 모터 추가 창 | `ZONE-*-BTN-ADD` 클릭 | 560×340, 기존모터제어 선택 시 560×460, 모달 (운영 프로그램 400×300 보다 큼) | `dialogs.py` / `MotorDialog(mode="ADD")` | `wMotor` |
+| `DLG-MOTOR` (MOD) | 모터 수정/삭제 창 | `ZONE-*-LIST` 항목 더블클릭 | 위와 같음, 모달 | `dialogs.py` / `MotorDialog(mode="MOD")` | `wMotor` |
+| `SCR-ERRLOG` | 에러 로그 창 (4.2절, 매뉴얼 4.5절) | `MAIN-BTN-ERRLOG` 클릭 | 920×480, 최소 640×300, 모달 아님 | `motor_monitor/ui/tools.py` / `ErrorLogWindow` | – (신규) |
+| `DLG-IMPORT-CFG` | 운영 프로그램 설정 가져오기 창 (7.3절, 매뉴얼 4.6절) | `MAIN-BTN-IMPORT` → 운영 프로그램 설정 | 820×470, 모달 | `tools.py` / `ConfigImportDialog` | – (신규) |
+| `DLG-IMPORT-MINI` | 미니 제어기 목록 가져오기 창 (7.3절, 매뉴얼 4.6절) | `MAIN-BTN-IMPORT` → 미니 제어기 목록 | 640×430, 모달 | `tools.py` / `MiniImportDialog` | – (신규) |
+| `DLG-MSG` | 메시지 창 (확인 예/아니오, 알림 확인). `MSG-*` 문구를 보여 줌 | 확인·오류가 필요할 때 | 폭 460, 높이는 문구에 맞춤, 모달. Enter = 첫 버튼(예/확인), Esc·닫기 = 아니오 | `dialogs.py` / `MessageDialog`, 호출은 `ui/msgbox.py` (`ask_yes_no`, `show_info`, `show_warning`, `show_error`) | Windows 메시지 상자 |
+
+**창 위치** (`dialogs.place_inside` / `inside_position`): 모든 새 창(`DLG-*`, `SCR-ERRLOG`, `DLG-MSG`)은 **부모 창 가운데**에 두고 **메인 창(`SCR-MAIN`) 밖으로 나가지 않게** 맞춥니다(새 창이 더 크면 메인 창 왼쪽 위). 화면(모니터) 크기로 자르지 않으므로 메인 창이 다른 모니터(음수 좌표 포함)에 있으면 그 모니터에 뜹니다. 창 크기가 바뀌어도(`DLG-MOTOR` 340→460) 메인 창 안에 머뭅니다(`keep_inside_owner`). 메시지 창을 닫으면 그 아래 대화상자가 다시 입력을 받습니다. 예외: 파일 선택 창(OS 표준 창이라 위치는 OS 가 정함, 부모 창은 메인 창으로 지정)과 메인 창이 생기기 전의 `MSG-MAIN-01`·`06`(OS 메시지 상자).
 
 ---
 
@@ -59,20 +65,22 @@
 ### 3.1 `SCR-MAIN` 메인 화면
 
 1~8구역이 가로 8열로 같은 폭으로 나뉩니다. 각 구역은 독립적으로 제어를 시작/종료합니다.
-맨 위 `MAIN-MODE-BANNER` 가 현재 실행 모드(제어=초록 / 모니터링=주황)를 보여 주고, 오른쪽 `MAIN-MODE-BTN` 으로 실행 중에 모드를 바꿉니다. 모니터링 모드에서는 버튼 문구의 '제어' 가 '모니터링' 으로 바뀝니다(4.4절).
+맨 위 `MAIN-MODE-BANNER` 가 현재 실행 모드(제어=초록 / 모니터링=주황)를 보여 주고, 오른쪽 `MAIN-MODE-BTN` 으로 실행 중에 모드를 바꿉니다. 프로그램은 항상 모니터링 모드로 시작합니다. 모니터링 모드에서는 버튼 문구의 '제어' 가 '모니터링' 으로 바뀝니다(4.4절).
 
 ![메인 화면 구성요소 번호](images/main_running_annotated.png)
 
 | 번호 | ID | 이름 | 종류 | 코드 객체 | 표시 / 동작 |
 |---|---|---|---|---|---|
 | – | `MAIN-MODE-BANNER` | 실행 모드 표시 띠 | 띠 + 글자 | `MainWindow.mode_banner` / `mode_label` | 항상 맨 위에 표시, 모드에 따라 색상·문구 변경. **제어 모드**: 초록(`C-MODE-CTRL`) "제어 모드 \| 모터 상태를 읽고, 제어 신호(수동·동작·RPM 설정)를 보냅니다." / **모니터링 모드**: 주황(`C-MODE-BANNER`) "모니터링 모드 \| 모터 상태를 읽기만 하고, 제어 신호(수동·동작·RPM 설정)는 보내지 않습니다." + 창 제목에 `[모니터링 모드 - 제어 신호 전송 안 함]` |
+| 11 | `MAIN-BTN-ERRLOG` | 에러 로그 버튼 | 버튼 | `MainWindow.BtnErrors` | 띠 오른쪽. 클릭 → `SCR-ERRLOG`. 확인하지 않은 새 에러가 있으면 빨간 바탕(`C-NET-ERR`) "에러 로그 (건수)", 창을 열면 흰 바탕 "에러 로그" |
+| 12 | `MAIN-BTN-IMPORT` | 설정 가져오기 버튼 | 버튼 + 메뉴 | `MainWindow.BtnImport` / `import_menu` | 메뉴: "운영 프로그램 설정 (Config.dll / Config.ini)…" → 파일 선택 → `DLG-IMPORT-CFG` / "미니 제어기 목록 (mini_control.json)…" → `DLG-IMPORT-MINI` |
 | 10 | `MAIN-MODE-BTN` | 모드 전환 버튼 | 버튼 | `MainWindow.BtnMode` | 띠 오른쪽 흰 버튼. 제어 모드에서 "모니터링 모드로 전환"(확인 `MSG-MAIN-09`), 모니터링 모드에서 "제어 모드로 전환"(경고 확인 `MSG-MAIN-10`). '예' 를 누르면 즉시 전환되고 띠 색상·문구, 창 제목, 모든 구역 버튼 문구가 함께 바뀜. 실행 중인 구역은 멈추지 않고 계속 동작 |
 | 1 | `ZONE-*-BTN-START` | n구역 제어 시작 버튼 | 버튼 | `ZonePanel.StartBtn` | 확인(`MSG-MAIN-02`) 후 이 구역만 통신·제어 시작 → `BTN-STOP` 으로 바뀜. 구역 폭 전체, 높이 29 |
 | 1 | `ZONE-*-BTN-STOP` | n구역 제어 종료 버튼 | 버튼 | `ZonePanel.StopBtn` | 확인(`MSG-MAIN-03`) 후 이 구역 통신·제어 중지 → 시작 버튼으로 바뀜 |
 | 2 | `ZONE-{n}` | 구역 패널 | 묶음 | `ZonePanel` (`MainWindow.zone_panels["H1R{n}"]`) | 위에서부터 제목줄, 제어 버튼, 머리 영역, 모터 목록 |
 | 2 | `ZONE-*-TITLE` | 구역 제목줄 | 글자 | `ZonePanel` 내부 Label | "n구역", 배경 `C-ZONE-TITLE`, 흰 굵은 글씨 |
-| 3 | `ZONE-*-DOT-OLD` / `ZONE-*-LBL-OLD` | 기존모터 통신상태 점 / IP/PORT | 점 / 글자 | `rec_SOURCE_NETSTATUS` / `lbl_old_ip` | 4.1절 색 규칙 / `172.27.0.82/502` 형식. 잘리면 마우스를 올려 전체 문구 |
-| 4 | `ZONE-*-DOT-NEW` / `ZONE-*-LBL-NEW` | 신규모터 통신상태 점 / IP/PORT | 점 / 글자 | `rec_TARGET_NETSTATUS` / `lbl_new_ip` | 위와 같음 |
+| 3 | `ZONE-*-DOT-OLD` / `ZONE-*-LBL-OLD` | 기존모터 통신상태 점 / IP | 점 / 글자 | `rec_SOURCE_NETSTATUS` / `lbl_old_ip` | 4.1절 색 규칙 / `172.27.0.82` 형식 (PORT 는 502 고정이라 표시 안 함). 잘리면 마우스를 올려 전체 문구 |
+| 4 | `ZONE-*-DOT-NEW` / `ZONE-*-LBL-NEW` | 신규모터 통신상태 점 / IP | 점 / 글자 | `rec_TARGET_NETSTATUS` / `lbl_new_ip` | 위와 같음 |
 | 5 | `ZONE-*-DOT-REF` / `ZONE-*-LBL-REF` | RPM 소스 상태 점 / 문구 | 점 / 글자 | `rec_SID_NETSTATUS` / `lbl_source` | 수동: `수동 > 800 RPM` / 참조: `1구역 > 2` (참조 구역 > 기존모터 ID) |
 | 6 | `ZONE-*-BTN-SET` | 설정 버튼(톱니) | 그림 버튼 | `ZonePanel.Btn_Settings` | 클릭 → `DLG-LINE`. 툴팁 "설정" |
 | 7 | `ZONE-*-BTN-ADD` | 추가 버튼(+) | 그림 버튼 | `ZonePanel.Btn_Add` | 클릭 → `DLG-MOTOR`(ADD). 툴팁 "추가" |
@@ -84,30 +92,30 @@
 | ID | 이름 | 폭 | 내용 | 머리글 클릭(정렬 기준) |
 |---|---|---|---|---|
 | `COL-TYPE` | 종류 열 (머리글 빈칸) | 32px | 아래 '종류 그림' 표 | 종류 |
-| `COL-ID` | ID 열 | 42px | 모터 ID (1~250, 기존모터제어 1~247) | ID |
+| `COL-ID` | ID 열 | 42px | 모터 ID (신규모터 1~30, 기존모터·기존모터제어 1~249) | ID |
 | `COL-STATUS` | 상태 열 | 나머지 | 상태 그림 + 오른쪽 정렬 문구 (아래 표) | 상태 코드 |
 
 **종류 그림 (`COL-TYPE`)**
 
 | 그림 | 뜻 (툴팁) |
 |---|---|
-| 회색 팬 | 기존모터 |
-| 녹색 팬 | 신규모터 |
-| 녹색 팬 + 빨간 **L** | 신규모터(제한모드) — 속도제한 사용 중 |
-| 회색 팬 + 파란 **C** | 기존모터제어 — 툴팁에 접속 IP:PORT, 지정속도, 제어 실패 내용 표시 (4.5절) |
+| 청색 팬 (`oldmotor.png`) | 기존모터 |
+| 주황색 팬 (`newmotor.png`) | 신규모터 |
+| 주황색 팬 + 빨간 **L** (`newmotor_limit.png`) | 신규모터(제한모드) — 속도제한 사용 중 |
+| 녹색 팬 + **C** (`oldmotor_ctrl.png`) | 기존모터제어 — 툴팁에 접속 IP, 운전속도 방식(`수동 지정 700 RPM (63.6%)` / `구역 참조 2구역 기존모터 66 (지금 770 RPM = 70%) → 지정 70% = 770 RPM`), 제어 문제 표시 (4.5절) |
 
 **상태 표시 (`COL-STATUS`)**
 
 | 상태 | 조건 | 그림 (툴팁) | 문구 |
 |---|---|---|---|
-| 정상 | 응답 받음, 이상기록 없음 | 녹색 ✓ (정상) | RPM 숫자, 검정 |
-| 정상(이상기록있음) | 응답 받고 있으나, 제어 시작 후 한 번이라도 60초 무응답이 있었음 | 빨간 **!** (정상(이상기록있음)) | RPM 숫자, 검정 |
+| 정상 | 응답 받음, 이상표시 없음 | 녹색 ✓ (정상) | RPM 숫자, 검정 |
+| 이상표시 | 명령 후 60초 무응답, 통신장치 접속 실패/연결 끊김, 기존모터제어 제어 문제(제어모드·쓰기 실패, 구역 참조값 60초 넘게 없음, 구역 참조값이 자기 자신) | 빨간 **!** (통신 이상 / 응답 대기 중 이상 + 이유) | RPM 숫자(검정) 또는 `대기` |
 | 이상 | 마지막 응답 후 1시간(`P-TIMEOUT-SEC`) 경과 | ✓+빨간 금지표시 (이상) | 마지막 RPM 숫자, **빨강 굵게** |
 | 중지 | 사용여부 = 중지 | 회색 ⓧ (중지(사용안함)) | `중지`, 연회색 굵게 |
 | 대기 | 제어 시작 전이거나, 시작 후 아직 응답 없음 | 없음 | `대기`, 연회색 굵게 |
 
 - **RPM 숫자**: 기존모터·기존모터제어 = 입력 레지스터 14(i14, 실제 회전수) 값, 신규모터 = 레지스터 0x05(현재 RPM) 값.
-- **이상기록(빨간 !)** 은 응답이 다시 와도 지워지지 않고, 해당 구역 **제어를 종료 후 다시 시작**하면 지워집니다.
+- **이상표시(빨간 !)** 는 **다시 응답이 오면 바로 지워져** 녹색 ✓ 로 돌아갑니다(기존모터제어의 제어 문제는 해결될 때까지 유지). 제어를 다시 시작해도 지워집니다. 이상·복구는 에러 로그(4.2절)에 기록됩니다.
 
 **정렬 규칙**
 - 처음: 신규모터 먼저, 같은 종류 안에서는 ID 오름차순.
@@ -123,16 +131,16 @@
 |---|---|---|---|---|---|
 | 1 | `DLG-LINE-TITLE` | 창 제목줄 "구역설정" | 제목줄 | `header`, `title_label` | 배경 `C-DLG-LINE`. 끌어서 창 이동 |
 | 2 | `DLG-LINE-LBL-HOUSE` | 위치 | 글자 | `lbl_house` | 예) `3구역` |
-| 3 / 4 | `DLG-LINE-TXT-SIP` / `-TXT-SPORT` | 기존모터 IP / PORT | 입력칸 | `txtSIP`, `txtSPORT` | 현재 설정값 |
-| 5 / 6 | `DLG-LINE-TXT-TIP` / `-TXT-TPORT` | 신규모터 IP / PORT | 입력칸 | `txtTIP`, `txtTPORT` | 현재 설정값 |
-| 7 | `DLG-LINE-RB-MANUAL` | RPM 제어 소스: 수동 | 라디오 | `rb_source_manual` | 선택 시 `ROW-MANUAL` 표시 |
-| 8 | `DLG-LINE-RB-REF` | RPM 제어 소스: 기존모터 | 라디오 | `rb_source_ref` | 선택 시 `ROW-REF` 표시 |
-| 9 | `DLG-LINE-CB-LINE` | 참조 구역 선택 | 콤보 | `cb_lines` | 항목: 구역선택 / 1구역 … 8구역. 바꾸면 `CB-ID` 다시 채움 |
-| 10 | `DLG-LINE-CB-ID` | 참조 모터 ID | 콤보 | `cb_ids` | "ID" + 선택 구역의 **기존모터** ID (등록 순서) |
-| 11 | `DLG-LINE-BTN-SAVE` | 저장 (Enter) | 버튼 | `BtnSave` | 검증 → 저장 → 메인 머리 영역 갱신 → 닫기 |
-| 12 | `DLG-LINE-BTN-CANCEL` | 취소 (Esc) | 버튼 | `BtnCancel` | 저장 없이 닫기 |
-| 13 | `DLG-LINE-TXT-MRPM` | 수동RPM값 | 입력칸 | `txtMRPM` (`ROW-MANUAL` = `manual_line`) | 현재 설정값 |
-| 14 | `DLG-LINE-LBL-RANGE` | 범위 안내 | 글자 | `lbl_rpm_range` | `정수(0~1100)` |
+| 3 | `DLG-LINE-TXT-SIP` | 기존모터 IP | 입력칸 | `txtSIP` | 현재 설정값. PORT 입력칸 없음(502 고정, `-TXT-SPORT` 는 2.4.0 에서 없앰) |
+| 4 | `DLG-LINE-TXT-TIP` | 신규모터 IP | 입력칸 | `txtTIP` | 현재 설정값 (`-TXT-TPORT` 는 2.4.0 에서 없앰) |
+| 5 | `DLG-LINE-RB-MANUAL` | RPM 제어 소스: 수동 | 라디오 | `rb_source_manual` | 선택 시 `ROW-MANUAL` 표시 |
+| 6 | `DLG-LINE-RB-REF` | RPM 제어 소스: 기존모터 | 라디오 | `rb_source_ref` | 선택 시 `ROW-REF` 표시 |
+| 7 | `DLG-LINE-CB-LINE` | 참조 구역 선택 | 콤보 | `cb_lines` | 항목: 구역선택 / 1구역 … 8구역. 바꾸면 `CB-ID` 다시 채움 |
+| 8 | `DLG-LINE-CB-ID` | 참조 모터 ID | 콤보 | `cb_ids` | "ID" + 선택 구역의 **기존모터** ID (등록 순서) |
+| 9 | `DLG-LINE-BTN-SAVE` | 저장 (Enter) | 버튼 | `BtnSave` | 검증 → 저장 → 메인 머리 영역 갱신 → 닫기 |
+| 10 | `DLG-LINE-BTN-CANCEL` | 취소 (Esc) | 버튼 | `BtnCancel` | 저장 없이 닫기 |
+| 11 | `DLG-LINE-TXT-MRPM` | 수동RPM값 | 입력칸 | `txtMRPM` (`ROW-MANUAL` = `manual_line`) | 현재 설정값 |
+| 12 | `DLG-LINE-LBL-RANGE` | 범위 안내 | 글자 | `lbl_rpm_range` | `정수(0~1100)` |
 
 **초기값**: 참조 구역이 비어 있으면 자기 구역을 선택. 참조 ID 가 목록에 있으면 그 ID 선택.
 
@@ -140,12 +148,12 @@
 
 | 순서 | 조건 | 메시지 ID |
 |---|---|---|
-| 1~5 | 기존모터 IP 비어있음 / 형식오류 / PORT 비어있음 / 숫자아님 / 1~65535 밖 | `MSG-LINE-01`~`05` |
-| 6~10 | 신규모터 IP/PORT 에 대해 같은 검사 | `MSG-LINE-06`~`10` |
-| 11~12 | (수동) RPM 정수 아님 / 0~1100 밖 | `MSG-LINE-11`, `12` |
-| 13~14 | (기존모터) 참조 구역 미선택 / 참조 ID 미선택 | `MSG-LINE-13`, `14` |
+| 1~2 | 기존모터 IP 비어있음 / 형식오류 | `MSG-LINE-01`, `02` |
+| 3~4 | 신규모터 IP 비어있음 / 형식오류 | `MSG-LINE-06`, `07` |
+| 5~6 | (수동) RPM 정수 아님 / 0~1100 밖 | `MSG-LINE-11`, `12` |
+| 7~8 | (기존모터) 참조 구역 미선택 / 참조 ID 미선택 | `MSG-LINE-13`, `14` |
 
-**저장 값**: 참조 구역은 `H1` + 선택값(예: `R2` → `H1R2`). 수동 모드에서도 선택된 참조 구역/ID 를 함께 저장(ID 미선택 시 -1). IP/PORT 변경은 다음 접속부터 적용.
+**저장 값**: 참조 구역은 `H1` + 선택값(예: `R2` → `H1R2`). 수동 모드에서도 선택된 참조 구역/ID 를 함께 저장(ID 미선택 시 -1). PORT 는 항상 502(`P-MODBUS-PORT`). IP 변경은 다음 접속부터 적용.
 
 ### 3.4 `DLG-MOTOR` 모터 추가 / 수정·삭제 창
 
@@ -156,10 +164,12 @@
 | 1 | `DLG-MOTOR-TITLE` | 창 제목줄 | 제목줄 | `header`, `title_label` | 공통 | "모터 추가" / "모터 수정/삭제". 배경 `C-DLG-MOTOR` |
 | 2 | `DLG-MOTOR-LBL-HOUSE` | 위치 | 글자 | `lbl_house` | 공통 | 예) `3구역` |
 | 3 / 4 | `DLG-MOTOR-RB-OLD` / `-RB-NEW` | 모터종류 | 라디오 | `rb_oldmotor`, `rb_newmotor` | ADD | 처음엔 선택 없음. 신규모터 선택 시 `ROW-LIMIT` 표시 |
-| 15 | `DLG-MOTOR-RB-CTRL` | 모터종류: 기존모터제어 | 라디오 | `rb_ctrlmotor` | ADD | 선택 시 `ROW-CTRL`(16~18) 표시, ID 범위 1~247 |
-| 5 | `DLG-MOTOR-TXT-ID` | 모터ID | 입력칸 | `txtID` | ADD | 옆에 `정수(1~250)` (기존모터제어는 `정수(1~247)`, `lbl_id_range`) |
-| 16 / 17 | `DLG-MOTOR-TXT-CIP` / `-TXT-CPORT` | 기존모터제어 접속 IP / PORT | 입력칸 | `txtCIP`, `txtCPORT` (`ROW-CTRL` = `ctrl_ip_row`) | 기존모터제어 | ADD: 이 구역의 기존모터 IP/PORT 가 기본값 / MOD: 수정 불가(읽기전용) |
-| 18 | `DLG-MOTOR-TXT-SETRPM` | 운전속도 (RPM) | 입력칸 | `txtSETRPM` (`ctrl_speed_row`) | 기존모터제어 | 0~1100, **필수 입력**(빈칸이면 오류 — 실수로 0 이 되어 멈추는 것 방지). 이 속도로 계속 운전 |
+| 15 | `DLG-MOTOR-RB-CTRL` | 모터종류: 기존모터제어 | 라디오 | `rb_ctrlmotor` | ADD | 선택 시 `ROW-CTRL`(16~20) 표시, 창 높이 460 (메인 창 안에 머물도록 위치 조정) |
+| 5 | `DLG-MOTOR-TXT-ID` | 모터ID | 입력칸 | `txtID` | ADD | 옆에 종류별 범위(`lbl_id_range`): 신규모터 `정수(1~30)`, 기존모터·기존모터제어 `정수(1~249)` (`constants.id_range`) |
+| 16 | `DLG-MOTOR-TXT-CIP` | 기존모터제어 접속 IP | 입력칸 | `txtCIP` (`ROW-CTRL` = `ctrl_ip_row`) | 기존모터제어 | ADD: 이 구역의 기존모터 IP 가 기본값 / MOD: 수정 불가(읽기전용). PORT 입력칸 없음(502 고정, `-TXT-CPORT` 는 2.4.0 에서 없앰) |
+| 17 / 19 | `DLG-MOTOR-RB-CTRL-MANUAL` / `-RB-CTRL-REF` | 운전속도 방식: 수동 지정 / 구역 참조 | 라디오 | `rb_ctrl_manual`, `rb_ctrl_ref` (`ctrl_mode_var`) | 기존모터제어 | ADD 기본 수동 지정 / MOD 현재값. 구역 참조면 18 비활성 |
+| 18 | `DLG-MOTOR-TXT-SETRPM` / `-LBL-SETPCT` | 운전속도 (RPM, 수동 지정) / 1100 대비 % | 입력칸 / 글자 | `txtSETRPM`, `lbl_set_pct` (`ctrl_speed_row`) | 기존모터제어(수동) | 0~1100, **수동 지정이면 필수 입력**(빈칸이면 오류 — 실수로 0 이 되어 멈추는 것 방지). 이 속도로 계속 운전. 옆 글자 `RPM (0~1100) = 63.6%` (입력할 때마다 갱신) |
+| 20 | `DLG-MOTOR-LBL-ZONEREF` | 구역 참조값 | 글자 | `lbl_zone_ref` (`ctrl_ref_row`), `zone_reference_text()` | 기존모터제어 | 이 구역 신규모터가 따르는 값의 출처·현재 값·% (`HouseLine.zone_reference()`): 예) `2구역 기존모터 66 → 지금 770 RPM = 70%`, `구역 수동 600 RPM → 지금 600 RPM = 54.5%`, 읽기 전이면 `→ 지금 값 없음 (…)`. 구역 참조가 아니면 흐리게. 아래 안내 `ctrl_ref_note` (참조 IP/PORT/ID 입력칸·[구역 참조] 버튼은 2.4.0 에서 없앰) |
 | 6 / 7 | `DLG-MOTOR-RB-USE` / `-RB-NOUSE` | 사용여부 | 라디오 | `rb_use`, `rb_nouse` | 공통 | ADD: 기본 **사용** / MOD: 현재값 |
 | 8 | `DLG-MOTOR-CB-LIMIT` | 속도제한 사용함/사용안함 | 콤보 | `cbUSELIMIT` (`ROW-LIMIT` = `limit_row`) | 신규모터만 | ADD 기본 "사용안함" / MOD 현재값 |
 | 9 | `DLG-MOTOR-TXT-LIMIT` | 최대속도 (RPM) | 입력칸 | `txtLIMITRPM` | 신규모터만 | ADD 기본 0 / MOD 현재값. 0~1100 |
@@ -170,14 +180,14 @@
 | 14 | `DLG-MOTOR-BTN-DELETE` | 삭제 | 버튼(빨강) | `BtnDelete` | MOD | 3.4.2 |
 
 **3.4.1 추가/수정 처리 순서**
-1. (ADD) 종류 미선택 → `MSG-MOTOR-01` / ID 비었거나 숫자 아님 → `MSG-MOTOR-02` / 1~250 밖 → `MSG-MOTOR-03`
+1. (ADD) 종류 미선택 → `MSG-MOTOR-01` / ID 비었거나 숫자 아님 → `MSG-MOTOR-02` / 종류별 범위(신규모터 1~30, 기존모터·기존모터제어 1~249) 밖 → `MSG-MOTOR-03`
 2. 사용여부 미선택 → `MSG-MOTOR-04`
 3. 최대속도 비었으면 0 으로 채움 / 숫자 아님 → `MSG-MOTOR-09` / 0~1100 밖 → `MSG-MOTOR-10`
-3-1. (기존모터제어) ID 1~247 밖 → `MSG-MOTOR-03`(1-247) / IP 비어있음 → `MSG-MOTOR-11` / IP 형식 → `MSG-MOTOR-12` / PORT → `MSG-MOTOR-13` / 운전속도 비었거나 0~1100 밖 → `MSG-MOTOR-14`
+3-1. (기존모터제어) IP 비어있음 → `MSG-MOTOR-11` / IP 형식 → `MSG-MOTOR-12` / (수동 지정) 운전속도 비었거나 0~1100 밖 → `MSG-MOTOR-14` / (구역 참조) 구역의 참조 기존모터가 이 모터 자신(`Plant.reference_endpoint(구역)` = 접속 IP·502·ID) → `MSG-MOTOR-21`. 구역 참조에서 수동 운전속도 칸이 비었거나 범위 밖이면 0 으로 저장(쓰지 않음). PORT 는 502 로 저장
 4. 확인 `MSG-MOTOR-05` (기존모터제어는 `MSG-MOTOR-15`) (아니오 → 창 유지)
 5. 기존모터·기존모터제어는 속도제한을 항상 '사용안함, 0' 으로 저장
 6. (ADD) 같은 종류+ID 가 있으면 `MSG-MOTOR-06` / 없으면 추가
-7. (MOD) 사용여부·속도제한 반영. 사용→중지로 바꾼 신규모터는 다음 주기에 RPM 0 을 한 번 전송
+7. (MOD) 사용여부·속도제한(기존모터제어는 운전속도 방식·수동 운전속도) 반영. 사용→중지로 바꾼 신규모터는 다음 주기에 RPM 0 을 한 번 전송
 8. `Config.dll` 저장 → 닫기 → 목록 갱신
 
 **3.4.2 삭제**: 확인 `MSG-MOTOR-07`(기존모터제어는 `MSG-MOTOR-16`) → 기존모터를 다른 구역이 참조 중이면 `MSG-MOTOR-08` 후 중단 → 삭제·저장·닫기.
@@ -198,21 +208,17 @@
 | `MSG-MAIN-10` | 제어 모드로 전환 | (경고 아이콘) 제어 모드로 전환하시겠습니까? 전환하면 제어 신호(수동·동작·RPM 설정)를 모터로 보냅니다. + 실행 중인 구역이 있으면 "실행 중인 구역(1구역, 3구역…)에 제어 신호가 바로 전송됩니다. 운영 프로그램이 같은 모터를 제어하고 있다면 신호가 겹칠 수 있습니다." | 예/아니오 | 모니터링 모드에서 `MAIN-MODE-BTN` |
 | `MSG-LINE-01` | 에러 | 기존모터 접속 IP를 입력해 주세요. | 확인 | `DLG-LINE` 저장 |
 | `MSG-LINE-02` | 에러 | 기존모터 접속 IP가 올바른 형식이 아닙니다.. | 확인 | 〃 |
-| `MSG-LINE-03` | 에러 | 기존모터 접속 PORT를 입력해 주세요. | 확인 | 〃 |
-| `MSG-LINE-04` | 에러 | 기존모터 접속 PORT를 숫자로 입력해 주세요. | 확인 | 〃 |
-| `MSG-LINE-05` | 에러 | 기존모터 접속 PORT를 숫자로 1~65535범위로 입력해 주세요. | 확인 | 〃 |
+| ~~`MSG-LINE-03`~`05`~~ | – | (2.4.0 에서 없앰: PORT 502 고정, 입력칸 없음) 기존모터 접속 PORT 검사 | – | – |
 | `MSG-LINE-06` | 에러 | 신규 모터 접속 IP를 입력해 주세요. | 확인 | 〃 |
 | `MSG-LINE-07` | 에러 | 신규모터 접속 IP가 올바른 형식이 아닙니다.. | 확인 | 〃 |
-| `MSG-LINE-08` | 에러 | 신규모터 접속 PORT를 입력해 주세요. | 확인 | 〃 |
-| `MSG-LINE-09` | 에러 | 신규모터 접속 PORT를 숫자로 입력해 주세요. | 확인 | 〃 |
-| `MSG-LINE-10` | 에러 | 신규모터 접속 PORT를 숫자로 1~65535범위로 입력해 주세요. | 확인 | 〃 |
+| ~~`MSG-LINE-08`~`10`~~ | – | (2.4.0 에서 없앰: PORT 502 고정) 신규모터 접속 PORT 검사 | – | – |
 | `MSG-LINE-11` | 에러 | 수동 RPM속도를 숫자로 입력해주세요. | 확인 | 〃 |
 | `MSG-LINE-12` | 에러 | 수동 RPM속도를 0~1100범위내로 입력해주세요. | 확인 | 〃 |
 | `MSG-LINE-13` | 에러 | 참조할 모터가 있는 구역을 선택해주세요. | 확인 | 〃 |
 | `MSG-LINE-14` | 에러 | 참조할 모터 ID를 선택해주세요. | 확인 | 〃 |
 | `MSG-MOTOR-01` | 오류 | 모터 종류을 선택해 주세요. | 확인 | `DLG-MOTOR` 추가 |
 | `MSG-MOTOR-02` | 오류 | 모터 ID값을 숫자로 입력해주세요. | 확인 | 〃 |
-| `MSG-MOTOR-03` | 오류 | 모터ID값은 숫자로 1-250범위로 입력하셔야 합니다. | 확인 | 〃 |
+| `MSG-MOTOR-03` | 오류 | 모터ID값은 숫자로 1-30범위로 입력하셔야 합니다. (신규모터) / …1-249범위로… (기존모터·기존모터제어) | 확인 | 〃 |
 | `MSG-MOTOR-04` | 오류 | 사용 여부을 선택해 주세요. | 확인 | `DLG-MOTOR` |
 | `MSG-MOTOR-05` | 추가 / 수정 | 해당 모터정보를 추가하시겠습니까? / 해당 모터정보를 수정하시겠습니까? | 예/아니오 | 〃 |
 | `MSG-MOTOR-06` | 오류 | 이미 해당 모터 종류와 ID를 갖는 모터가 있습니다. 확인바랍니다. | 확인 | `DLG-MOTOR` 추가 |
@@ -222,12 +228,18 @@
 | `MSG-MOTOR-10` | 오류 | 제한모드 RPM값은 숫자 0~1100범위로 입력하셔야 합니다. | 확인 | 〃 |
 | `MSG-MOTOR-11` | 오류 | 기존모터제어 접속 IP를 입력해 주세요. | 확인 | 기존모터제어 저장 |
 | `MSG-MOTOR-12` | 오류 | 기존모터제어 접속 IP가 올바른 형식이 아닙니다.. | 확인 | 〃 |
-| `MSG-MOTOR-13` | 오류 | 기존모터제어 접속 PORT를 숫자로 1~65535범위로 입력해 주세요. | 확인 | 〃 |
+| ~~`MSG-MOTOR-13`~~ | – | (2.4.0 에서 없앰: PORT 502 고정) 기존모터제어 접속 PORT 검사 | – | – |
 | `MSG-MOTOR-14` | 오류 | 운전속도를 숫자 0~1100범위로 입력해주세요. | 확인 | 〃 |
-| `MSG-MOTOR-15` | 추가 / 수정 | 해당 모터정보를 추가(수정)하시겠습니까? + "구역 제어를 시작하면 이 모터는 아날로그 제어신호 대신 통신으로 받은 속도(n RPM)로 계속 운전합니다." | 예/아니오 | 〃 |
+| `MSG-MOTOR-15` | 추가 / 수정 | 해당 모터정보를 추가(수정)하시겠습니까? + "구역 제어를 시작하면 이 모터는 아날로그 제어신호 대신 통신으로 받은 속도로, 지정한 속도(n RPM = n%)로 / 이 구역 신규모터가 따르는 값(출처)을 최고속도 1100 RPM 대비 %로 바꿔 같은 비율로(지금 n RPM = n%) 계속 운전합니다." | 예/아니오 | 〃 |
 | `MSG-MOTOR-16` | 삭제 | 해당 모터정보를 삭제하시겠습니까? + "삭제해도 모터는 마지막으로 받은 속도로 계속 운전합니다(통신 제어모드 유지)." | 예/아니오 | 기존모터제어 삭제 |
+| ~~`MSG-MOTOR-17`~`20`~~ | – | (2.4.0 에서 없앰: 참조 IP/PORT/ID 입력칸 없음) 참조모터 IP·PORT·ID·자기 자신 검사 | – | – |
+| `MSG-MOTOR-21` | 오류 | 구역 참조값이 이 모터 자신의 회전수입니다(구역설정의 참조기존모터). 수동 지정으로 하거나 구역설정에서 다른 참조기존모터를 지정해 주세요. | 확인 | 기존모터제어(구역 참조) 저장 |
+| `MSG-MAIN-11` | 설정 가져오기 | 실행 중인 구역이 있습니다. 모든 구역을 종료한 뒤 가져오세요. | 확인 | `MAIN-BTN-IMPORT` 운영 프로그램 설정 (실행 중 구역 있음) |
+| `MSG-MAIN-12` | 설정 가져오기 | 설정 파일을 읽지 못했습니다. / 파일을 읽지 못했습니다. (+이유) | 확인 | 운영 프로그램 설정 파일이 아님·해독 불가 / 미니 제어기 파일 형식 오류 |
+| `MSG-IMPORT-01` | 가져오기 | 설정을 가져오시겠습니까? 지금 설정 파일은 백업 후 바뀝니다. → 완료: 설정을 가져왔습니다. 이전 설정 백업: (경로) | 예/아니오 → 확인 | `DLG-IMPORT-CFG` |
+| `MSG-IMPORT-02` | 가져오기 | n구역에 기존모터제어 n개를 추가하시겠습니까? → 완료: n구역에 n개를 추가했습니다. (+건너뜀 목록) | 예/아니오 → 확인 | `DLG-IMPORT-MINI` |
 
-> 문구(맞춤법 포함)는 운영 프로그램 그대로입니다.
+> 문구(맞춤법 포함)는 운영 프로그램 그대로입니다. 메시지는 모두 `DLG-MSG`(프로그램 창 안)로 보여 줍니다. 단, 메인 창이 생기기 전의 `MSG-MAIN-01`·`06` 은 OS 메시지 상자입니다.
 
 ### 3.6 `SCR-TESTER` 기존모터 시험기
 
@@ -276,18 +288,20 @@
 | 제어 중 + 이상 | 빨강: 접속 실패/끊김 (10초마다 재시도) | 빨강 | 빨강: 참조 모터가 정상 아님/없음 → **이 구역 신규모터 제어 보류** |
 
 ### 4.2 모터 상태 판정
-- 응답을 받으면 즉시 **정상**, 표시 RPM·마지막 응답 시각 갱신.
+- 응답을 받으면 즉시 **정상**, 표시 RPM·마지막 응답 시각 갱신, **이상표시 해제**(기존모터제어의 제어 문제가 남아 있으면 유지) + 에러 로그 '복구'.
 - 아래 판정은 **이 구역이 제어 중일 때만 5초마다** 수행(제어 종료 시 마지막 표시 유지).
 
 | 조건 | 결과 |
 |---|---|
 | 사용 = 중지 | 중지 |
 | 사용 + 응답 이력 없음 | 대기 |
-| 명령 전송 후 60초(`P-WARN-SEC`) 동안 응답 없음 | 이상기록 표시(빨간 !) — 상태는 정상 유지 |
-| 마지막 응답 후 3600초(`P-TIMEOUT-SEC`) 이상 | 이상 |
+| 명령 전송 후 60초(`P-WARN-SEC`) 동안 응답 없음 (응답 이력이 없어도) | 이상표시(빨간 !) — 상태는 정상/대기 유지, 에러 로그 |
+| 통신장치 접속 실패·연결 끊김 (기존모터/신규모터/기존모터제어 통신장치별) | 그 장치의 사용 중인 모터에 이상표시 즉시, 에러 로그는 장치마다 끊김 1번·복구 1번 |
+| 마지막 응답 후 3600초(`P-TIMEOUT-SEC`) 이상 | 이상, 에러 로그 |
 | 그 외 | 정상 |
 
-- 제어 시작 시 그 구역 모든 모터의 이상기록·응답이력 초기화(대기부터 다시 시작).
+- 제어 시작 시 그 구역 모든 모터의 이상표시·응답이력 초기화(대기부터 다시 시작).
+- 에러 로그(`Plant.errors`, `motor_monitor/errorlog.py`): 상태가 바뀔 때만 기록(같은 문제 반복 기록 없음). 메모리 최근 1000건 + `logs/error.log`(2MB×5 순환), 다시 켜면 파일의 지난 기록을 읽어 옴. 화면: `SCR-ERRLOG` (매뉴얼 4.5절).
 
 ### 4.3 제어 흐름 (구역 1개, `ZONE-*-BTN-START` 후)
 
@@ -307,22 +321,22 @@
 
 ### 4.4 모니터링 모드 (읽기 전용)
 
-운영 프로그램이 같은 모터를 제어하는 중에 이 프로그램을 시험할 때, 제어 신호가 겹치지 않도록 **읽기만** 하는 실행 모드입니다.
+제어 신호가 겹치거나 의도하지 않은 속도 변경이 없도록 **읽기만** 하는 실행 모드입니다. **프로그램은 실행하면 항상 이 모드로 시작합니다**(`app.create_plant`, `--monitoring` 옵션은 남아 있으나 효과 없음).
 
-| 항목 | 제어 모드 (기본) | 모니터링 모드 |
+| 항목 | 제어 모드 | 모니터링 모드 (시작 시 항상) |
 |---|---|---|
-| 시작 모드 | `python run.py` / `BLDC_MOTOR_MONITOR.exe` | `python run.py --monitoring` / `BLDC_MOTOR_MONITOR.exe --monitoring` / `run_monitoring.bat` |
+| 들어가는 방법 | 모니터링 모드에서 `MAIN-MODE-BTN` "제어 모드로 전환" | 프로그램 시작 / 제어 모드에서 "모니터링 모드로 전환" |
 | 실행 중 모드 전환 | `MAIN-MODE-BTN` "모니터링 모드로 전환" (확인 `MSG-MAIN-09`) | `MAIN-MODE-BTN` "제어 모드로 전환" (경고 확인 `MSG-MAIN-10`) |
 | 기존모터 RPM 읽기 (FC04) | 함 | 함 |
 | 신규모터 1·2페이지 읽기 (FC03) | 함 | 함 (현재 RPM, 상태 표시) |
 | 신규모터 쓰기 (FC06: 수동 0x13, 동작 0x14, RPM 0x16, 중지 시 RPM 0) | 함 | **하지 않음** — 명령을 만들지도 보내지도 않음 |
-| 기존모터제어 읽기 (h1~h4, i14) | 함 | 함 (실제 회전수 표시) |
+| 기존모터제어 읽기 (h1~h4, i14) + 구역 참조값 확인 | 함 | 함 (실제 회전수·구역 참조값과 % 표시) |
 | 기존모터제어 쓰기 (h0 PIN, h4 제어모드, h1 Enable, h2 운전속도) | 함 | **하지 않음** |
 | 상태 판정, 상태 점, 목록 표시 | 같음 | 같음 (`DOT-REF` 는 "제어 모드였다면 제어 가능한지" 를 표시) |
-| 시작/종료 시 `Config.dll` 자동 저장 | 함 | **하지 않음** (구역설정·모터 추가/수정/삭제처럼 직접 바꾼 내용만 저장). 시작 시점은 시작 모드, 종료 시점은 종료할 때의 모드 기준 |
+| 시작/종료 시 `Config.dll` 자동 저장 | 함(종료 시) | **하지 않음** (구역설정·모터 추가/수정/삭제·설정 가져오기처럼 직접 바꾼 내용만 저장). 항상 모니터링 모드로 시작하므로 시작 시에는 저장하지 않음, 종료 시점은 종료할 때의 모드 기준 |
 | 화면 | 초록 `MAIN-MODE-BANNER`, 버튼 "n구역 제어 시작/종료" | 주황 `MAIN-MODE-BANNER`, 창 제목 표시, 버튼 "n구역 모니터링 시작/종료" |
 
-- 구현: 모든 쓰기 명령은 `HouseLine._enqueue_write` 한 곳을 거치며, 모니터링 모드면 버려집니다. 전송 단계(`_flush_writes`)에서도 한 번 더 막습니다(이중 차단). 자동 시험 `test_monitoring_mode_never_writes` 가 쓰기 요청 0건을 확인합니다.
+- 구현: 모든 쓰기 명령은 `HouseLine._enqueue_write` 한 곳을 거치며, 모니터링 모드면 버려집니다. 전송 단계(`_flush_writes`)에서도 한 번 더 막습니다(이중 차단). 기존모터제어 쓰기는 `_ctrl_write` 에서 막습니다. 자동 시험 `test_monitoring_mode_never_writes`, `test_monitoring_mode_never_writes_including_ref_mode` 가 쓰기 요청 0건을 확인합니다.
 - 실행 중 전환의 동작:
   - 통신 스레드는 명령을 만들 때마다 현재 모드(`Plant.monitoring`)를 다시 확인하므로 전환은 **즉시** 반영됩니다. 구역을 멈추거나 다시 시작할 필요가 없습니다.
   - 제어 → 모니터링: 그 순간부터 쓰기 0건, 아직 보내지 않은 쓰기 명령도 버립니다. 모터는 마지막으로 받은 설정(수동·동작·RPM, ECblue h2)대로 계속 운전합니다.
@@ -332,18 +346,25 @@
 
 ### 4.5 기존모터제어 (기존 ECblue 모터 직접 속도 지정)
 
-기존 모터의 아날로그 제어신호선(E1, 0-10V)에 문제가 있을 때, 기존 모터를 **Modbus 통신으로 직접 지정한 속도로 운전**시키는 모터 종류입니다. 근거 문서: ZIEHL-ABEGG "ECblue MODBUS Description" L-BAL-E076-GB 1517 Index 013 (펌웨어 1.03~14).
+기존 모터의 아날로그 제어신호선(E1, 0-10V)에 문제가 있을 때, 기존 모터를 **Modbus 통신으로 받은 속도로 운전**시키는 모터 종류입니다. 운전속도는 **수동 지정**(고정값) 또는 **구역 참조**(이 구역 신규모터가 따르는 값을 1100 대비 % 로 같은 비율) 중에서 고릅니다. 근거 문서: ZIEHL-ABEGG "ECblue MODBUS Description" L-BAL-E076-GB 1517 Index 013 (펌웨어 1.03~14).
 
-- 모터마다 **접속 IP / PORT / ID(버스 주소 1~247)** 와 **운전속도**를 지정합니다. 같은 IP:PORT 의 모터들은 연결 하나를 같이 씁니다.
+- 모터마다 **접속 IP / ID(1~249)** 와 **운전속도 방식**을 지정합니다(PORT 는 502 고정). 같은 IP 의 모터들은 연결 하나를 같이 씁니다.
+- **구역 참조 방식** (`HouseLine._ctrl_target`):
+  1. 구역 참조값 = 이 구역 신규모터가 따르는 값 그대로 (`HouseLine.zone_reference()` → `resolve_setting_rpm()`): 구역설정이 수동이면 수동 RPM, 기존모터 참조면 참조 기존모터가 '정상'일 때의 RPM. 별도 통신 없이 신규모터 제어와 같은 값을 씁니다.
+  2. % = 구역 참조값 ÷ `P-MAX-RPM`(1100) × 100 (0~100, 넘으면 100) — `constants.rpm_to_pct`.
+  3. 운전속도 = `P-MAX-RPM` × % (`constants.pct_to_rpm`, 미니 제어기와 같은 계산: 100% = 1100). h4 제어모드는 수동 지정과 같은 절대 회전수 방식이라 h2 에는 RPM 을 씁니다(예: 770 RPM → 70% → h2 = 770).
+  4. 값이 없으면(참조 기존모터 대기·상태 이상·없음, 그 구역 실행 안 함) **이전에 정한 속도를 유지**(한 번도 정하지 못했으면 h2 를 쓰지 않음). 값 없음이 `P-WARN-SEC`(60초) 넘게 이어지면 이상표시·에러 로그 "구역 참조값(출처) 60초 넘게 값 없음 … - 이전 지정 n% (n RPM) 유지". 구역을 막 시작해 참조 기존모터를 아직 읽기 전에는 에러 없이 기다림.
+  5. 참조 기존모터가 이 모터 자신(`Plant.reference_endpoint(구역)` = 접속 IP·PORT·ID)이면 따라가지 않고 이상표시 (자기 회전수를 목표로 하면 속도가 굳음).
 - 구역 제어를 시작하면 구역마다 '기존모터제어' 처리 1개가 아래를 반복합니다 (명령 간격 0.3초):
 
 | 순서 | 동작 | 레지스터 | 조건 / 비고 |
 |---|---|---|---|
+| 0 | (구역 참조 방식) 구역 참조값·% 확인 | 통신 없음 (신규모터 제어와 같은 값) | 모니터링 모드에서도 확인해 표시 |
 | 1 | 현재 설정 읽기 | FC03 h1~h4 (주소 1부터 4개) | |
 | 2 | 실제 회전수 읽기 | FC04 i14 (주소 14) | 목록에 표시, 응답 시 '정상' |
 | 3 | 제어모드 설정 | h0 ← 0010 (PIN 보호 2단계 해제) 후 h4 ← (bit[3:0]=1, bit8=1, 나머지 비트 유지) | h4 가 이미 맞으면 **쓰지 않음**. h4 는 영구저장(NV, 쓰기 수명 1만 회)이라 프로그램 실행 1회당 모터별 최대 3회(`P-CTRL-MODE-TRIES`)만 시도, 실패 시 빨간 ! 와 툴팁 "제어모드 설정 실패" |
 | 4 | Enable | h1 bit0 ← 1 | 꺼져 있을 때만 |
-| 5 | 운전속도 | h2 ← 운전속도 | 읽은 값과 다를 때만 (휘발성 레지스터) |
+| 5 | 운전속도 | h2 ← 운전속도 (수동 지정값 또는 1100 × 구역 참조 %) | 읽은 값과 다를 때만 (휘발성 레지스터). 쓰기 실패 시 이상표시·에러 로그 |
 | – | 사용 '중지' 로 바꿀 때 | h2 ← 0 (1회) | |
 
 - **계속 운전**: h2 는 다음 명령이 올 때까지 유지되고, 통신 감시(h17) 기본값이 꺼짐이라 프로그램을 꺼도 마지막 속도로 계속 운전합니다. 모터가 재시작되어 h2 가 0 이 되면, 프로그램이 다음 주기에 다시 맞춥니다.
@@ -356,11 +377,12 @@
 
 | ID | 상수명 | 값 | 의미 |
 |---|---|---|---|
-| `P-MAX-RPM` | `MAX_RPM` | 1100 | 수동 RPM·최대속도 상한 |
-| `P-MOTOR-ID-RANGE` | `MOTOR_ID_MIN`/`MAX` | 1~250 | 모터 ID 범위 |
-| `P-CTRL-ID-RANGE` | `CTRL_ID_MIN`/`MAX` | 1~247 | 기존모터제어 ID(ECblue 버스 주소) 범위 |
+| `P-MAX-RPM` | `MAX_RPM` | 1100 | 수동 RPM·최대속도 상한. 기존모터제어 구역 참조 % 의 기준(100% = 1100, `rpm_to_pct`/`pct_to_rpm`/`pct_text`) |
+| `P-MOTOR-ID-RANGE` | `MOTOR_ID_MIN`/`MAX` | 1~249 | 기존모터 ID 범위 |
+| `P-NEW-ID-RANGE` | `NEW_MOTOR_ID_MAX` | 1~30 | 신규모터 ID 범위 |
+| `P-CTRL-ID-RANGE` | `CTRL_ID_MIN`/`MAX` | 1~249 | 기존모터제어 ID 범위. 종류별 범위는 `id_range(종류)` |
 | `P-CTRL-MODE-TRIES` | `CTRL_MODE_WRITE_MAX_TRIES` | 3 | 기존모터제어 제어모드(h4, NV) 설정 시도 한도 (실행 1회·모터 1대당) |
-| `P-WARN-SEC` | `NO_RESPONSE_WARN_SEC` | 60초 | 무응답 → 이상기록(빨간 !) |
+| `P-WARN-SEC` | `NO_RESPONSE_WARN_SEC` | 60초 | 무응답 → 이상표시(빨간 !), 응답이 오면 해제. 기존모터제어 구역 참조값이 이 시간 넘게 없을 때도 이상표시 |
 | `P-TIMEOUT-SEC` | `MOTOR_TIMEOUT_SEC` | 3600초 | 마지막 응답 후 → 이상 (운영 프로그램 값) |
 | `P-STATUS-INTERVAL` | `STATUS_UPDATE_INTERVAL` | 5초 | 상태 판정 주기 |
 | `P-NET-INTERVAL` | `NETWORK_UPDATE_INTERVAL` | 5초 | 상태 점 갱신 주기 |
@@ -371,7 +393,8 @@
 | `P-CYCLE` | `CYCLE_INTERVAL` | 0.3초 | 읽기 명령 적재 후 대기 |
 | `P-ERR-RETRY` | `ERROR_RETRY_DELAY` | 1초 | 전송 오류 후 대기 |
 | `P-CMD-IDX-MAX` | `CMD_IDX_MAX` | 9999 | 트랜잭션 번호 최대 |
-| `P-DEFAULT-PORT` / `P-DEFAULT-IP` | `DEFAULT_PORT` / `DEFAULT_IP_PREFIX` | 502 / 192.168.0.x | 설정이 없을 때 기본값 (구역 n: 기존 2n-1, 신규 2n) |
+| `P-MODBUS-PORT` | `MODBUS_PORT` (예전 이름 `DEFAULT_PORT`) | 502 | **모든 접속 PORT (고정)**: 기존모터·신규모터 통신장치, 기존모터제어. 화면에서 입력·표시하지 않고, 설정 파일의 다른 값은 무시(로그에 기록)하며 저장도 502 |
+| `P-DEFAULT-IP` | `DEFAULT_IP_PREFIX` | 192.168.0.x | 설정이 없을 때 기본 IP (구역 n: 기존 2n-1, 신규 2n) |
 | `P-DEBUG` | `DEBUG_LINE`, `DEBUG_IDS` (house.py) | "ALL", {5, 50} | `--debug` 패킷 로그 범위 |
 
 ---
@@ -401,13 +424,13 @@
 - 위치: 실행 폴더. 운영 프로그램과 **같은 파일**이며 서로 바꿔 써도 됩니다.
 - 형식: INI 텍스트를 UTF-16LE 로 바꿔 **Triple DES(CBC, PKCS7)** 로 암호화한 파일. 키 = SHA1("ESAN_#@!", UTF-16LE) 24바이트, IV = SHA1("") 8바이트 (`motor_monitor/crypto3des.py`, 외부 라이브러리 불필요).
 - 내용 확인: `python -m motor_monitor.config Config.dll` → 평문 INI 출력.
-- 저장 시점: 시작 직후(기본값 채움), 구역설정 저장, 모터 추가/수정/삭제, 프로그램 종료. 임시파일에 쓴 뒤 교체.
+- 저장 시점: 구역설정 저장, 모터 추가/수정/삭제, 설정 가져오기, 프로그램 종료(제어 모드일 때). 항상 모니터링 모드로 시작하므로 시작만으로는 저장하지 않음. 임시파일에 쓴 뒤 교체.
 - 해독 실패 시 `MSG-MAIN-06` 후 종료 — **파일을 덮어쓰지 않음**.
 
 ```ini
 [LINE_CONFIG]
 H1R1_SOURCE_IP=172.27.0.82      ; 기존모터 IP
-H1R1_SOURCE_PORT=502
+H1R1_SOURCE_PORT=502            ; 항상 502 (고정. 읽을 때 다른 값은 무시)
 H1R1_TARGEIP=172.27.0.111       ; 신규모터 IP (키 이름 오타는 호환용으로 유지)
 H1R1_TARGEPORT=502
 H1R1_SOURCE_MANUAL=0            ; 1=수동, 0=기존모터 참조
@@ -419,13 +442,23 @@ H1R1_SOURCE_ID=2                ; 참조 기존모터 ID
 H1R1_MOTORS=2=0=1=0=0,4=0=1=0=0,1=1=1=0=0
 ; ID=종류(0기존/1신규)=사용(1/0)=속도제한(1/0)=최대속도, 등록 순서
 [CTRL_MOTOR_CONFIG]               ; 기존모터제어가 있을 때만 기록 (이 프로그램 전용)
-H1R1_MOTORS=2@172.27.0.82:502=1=700
-; ID@IP:PORT=사용(1/0)=운전속도
+H1R1_MOTORS=2@172.27.0.82:502=1=700,3@172.27.0.82:502=1=0=REF
+; 수동 지정: ID@IP:502=사용(1/0)=운전속도
+; 구역 참조: ID@IP:502=사용(1/0)=운전속도(쓰지 않음)=REF
 ```
+- PORT 칸은 예전 형식과 맞추려고 남겨 두며 항상 502 로 씁니다(읽을 때 다른 값·없음은 502).
+- 구역 참조 항목(4번째 칸 `REF`)은 버전 2.4.0 부터 기록됩니다. 2.4.0 보다 예전 버전은 이 항목을 읽지 못하고 건너뜁니다. 2.4.0 개발 중의 `R참조ID@참조IP:참조PORT` 형식도 구역 참조로 읽습니다.
 - `[CTRL_MOTOR_CONFIG]` 는 이 프로그램 전용입니다. 운영 프로그램(exe)은 이 섹션을 읽지 않으며, **운영 프로그램이 같은 `Config.dll` 을 저장하면 이 섹션이 지워집니다.** 두 프로그램이 같은 파일을 쓰지 않도록 하세요.
 
 ### 7.2 로그
 - `logs/motor_monitor.log` (실행 폴더, 2MB × 5개 순환): 접속 성공/실패, 제어 시작/종료. `--debug` 실행 시 송수신 패킷까지.
+- `logs/error.log` (2MB × 5개 순환): 에러 로그. 한 줄 = `시각 | 에러/복구 | 구역 | 대상 | 내용`.
+
+### 7.3 다른 프로그램 설정 가져오기 (`MAIN-BTN-IMPORT`)
+| 대상 | 파일 | 읽는 방법 (`config.py`) | 적용 (`plant.py`) |
+|---|---|---|---|
+| 운영 프로그램 BLDC_MOTOR_MONITOR (VB.NET) | `Config.dll`(3DES), `uconfig.dll`(평문 임시), `Config.ini`(구버전 평문, UTF-8/CP949) | `read_any_config_text` → `config_from_text`. `[LINE_CONFIG]`/`[MOTOR_CONFIG]` 가 없으면 `ConfigError` | `read_config_import` → 미리보기(`ConfigImport.summary_lines`) → `apply_config_import`: 실행 중 구역이 있으면 거부, `Config.dll.bak_YYYYMMDD_HHMMSS` 백업, 8구역 설정·모터 목록 교체(가져온 파일에 기존모터제어가 없으면 지금 목록 유지 선택), 저장 |
+| 미니 제어기 MINI_CONTROL | `mini_control.json` (목록) | `read_mini_items` → `mini_item_to_entry`: 속도 % → 수동 지정 RPM(100% = 1100), 참조팬 → **구역 참조**(미니 제어기에 지정한 참조팬 IP·ID 는 쓰지 않음, 미리보기에 "(미니 제어기 참조팬 … 대신)" 표시) | `import_mini_items(항목, 구역)`: 같은 키(ID@IP:502)는 건너뜀, 저장. 구역 기본값 = `zone_for_ip`(기존모터 IP 가 같은 구역) |
 
 ---
 
@@ -449,7 +482,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 
 - MBAP: 트랜잭션 번호(0~9999 순환, 기존/신규/기존모터제어 별도) · 프로토콜 0 · 길이 · Unit ID = 모터 ID.
 - 기존모터제어는 요청 1건마다 같은 트랜잭션 번호의 응답을 최대 2초 기다린 뒤 다음 요청을 보냅니다.
-- 구역마다 기존모터 게이트웨이와 신규모터 게이트웨이에 각각 TCP 연결 1개.
+- 구역마다 기존모터 게이트웨이와 신규모터 게이트웨이에 각각 TCP 연결 1개. 모든 연결의 PORT 는 502(`P-MODBUS-PORT`, 고정).
 
 ---
 
@@ -473,6 +506,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 ### 9.2 화면 기술 차이 (WPF → tkinter)
 - 대화상자 둥근 모서리는 사각형. Windows 에서는 제목표시줄 없는 창(머리글 끌어 이동), 그 외 OS 는 일반 창.
 - 목록은 데이터 바인딩 대신 0.3초 주기로 변경 확인. 머리 영역 문구가 잘리면 툴팁으로 전체 표시(신규).
+- 확인·알림: 운영 프로그램은 Windows 메시지 상자(화면 가운데) → 이 프로그램은 프로그램 창 안에 뜨는 `DLG-MSG`. 모든 대화상자도 화면이 아니라 프로그램 창 기준으로 위치를 정함(2장 '창 위치').
 
 ---
 
@@ -481,8 +515,8 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 | 파일 | 역할 | 운영 프로그램 |
 |---|---|---|
 | `run.py` | 실행 시작점 | – |
-| `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창), `--monitoring` 옵션 | `Application`, `MainWindow_Loaded` |
-| `run_monitoring.bat` | 모니터링 모드로 실행 (exe 가 있으면 exe, 없으면 python) | – |
+| `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창). 항상 모니터링 모드로 시작(`create_plant`), `--monitoring` 은 효과 없음 | `Application`, `MainWindow_Loaded` |
+| `run_monitoring.bat` | 예전 모니터링 모드 실행 파일 (지금은 일반 실행과 같음) | – |
 | `tools/ecblue_tester.py`, `ecblue_tester.bat`, `ecblue_tester.spec`, `build_tester_exe.bat`, `.github/workflows/build-tester-exe.yml` | `SCR-TESTER` 기존모터 시험기 (3.6절) | – |
 | `tools/motor_tester.py`, `motor_tester.bat`, `motor_tester.spec`, `build_motor_tester_exe.bat`, `.github/workflows/build-motor-tester-exe.yml`, `tests/test_motor_tester.py` | 모터 시험기 SUNINUS MOTOR TEST (`MOTOR_TESTER.exe` 새 구현, 매뉴얼 14장). 운영 프로그램과 별개 | – |
 | `tools/motor_scanner.py`, `motor_scanner.bat`, `motor_scanner.spec`, `build_motor_scanner_exe.bat`, `.github/workflows/build-motor-scanner-exe.yml`, `tests/test_motor_scanner.py` | 모터 스캐너 (매뉴얼 15장). ID 스캔, ECblue 상태·설정, 통신 워치독(h17). 운영 프로그램과 별개 | – |
@@ -494,14 +528,17 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 | `motor_monitor/helpers.py` | 구역명 변환, IP/정수 검사 | `M_Functions` |
 | `motor_monitor/modbus.py` | Modbus 프레임 생성/해석 | `C_HOUSE` GET_MSG_* |
 | `motor_monitor/house.py` | 구역별 모터 관리·정렬·상태·통신 | `C_HOUSE`, `C_LIST_BIND_Data` |
-| `motor_monitor/plant.py` | 전체 구역/설정, 구역별 제어 시작/종료 | `M_Variables` HOUSES/MCONFIG |
+| `motor_monitor/plant.py` | 전체 구역/설정, 구역별 제어 시작/종료, 에러 로그 보유, 설정 가져오기(7.3절) | `M_Variables` HOUSES/MCONFIG |
+| `motor_monitor/errorlog.py` | 에러 로그 (메모리 최근 1000건 + `logs/error.log`) | – (신규) |
 | `motor_monitor/runtime.py` | 중복 실행 방지, 로그 | – |
-| `motor_monitor/simulator.py` | 장비 없이 시험하는 가상 게이트웨이 | – |
+| `motor_monitor/simulator.py` | 장비 없이 시험하는 가상 게이트웨이 (기본 127.0.0.1:502, 여러 개는 `--host 127.0.0.x`) | – |
 | `motor_monitor/ui/main_window.py` | `SCR-MAIN`, `ZONE-*` | `MainWindow` |
-| `motor_monitor/ui/dialogs.py` | `DLG-LINE`, `DLG-MOTOR` | `wHOUSE`, `wMotor` |
+| `motor_monitor/ui/dialogs.py` | `DLG-LINE`, `DLG-MOTOR`, `DLG-MSG`, 창 위치(`place_inside`, `inside_position`) | `wHOUSE`, `wMotor` |
+| `motor_monitor/ui/msgbox.py` | 메시지 창 호출(`ask_yes_no`, `show_info`, `show_warning`, `show_error`) - OS 메시지 상자 대신 `DLG-MSG` | `MessageBox` |
 | `motor_monitor/ui/widgets.py` | 버튼, 상태 점, 툴팁, 모터 목록 | XAML 템플릿 |
+| `motor_monitor/ui/tools.py` | `SCR-ERRLOG` 에러 로그 창, `DLG-IMPORT-CFG`, `DLG-IMPORT-MINI` 설정 가져오기 창 | – (신규) |
 | `motor_monitor/ui/theme.py` | 색상·글꼴·그림 | XAML 색상값 |
-| `tests/` | 자동 시험 (로직 32개 + 화면 8개) | – |
+| `tests/` | 자동 시험. 운영 프로그램: `test_core.py`, `test_ui.py`, `test_zone_requests.py`(ID 범위, 구역 참조 %, 모니터링, 재접속 표시, 에러 로그, 가져오기), `test_followup_requests.py`(PORT 502 고정, 창 위치, 메시지 창) | – |
 | `tools/` | 문서용 화면 캡처/번호 표시 | – |
 
 ---
@@ -515,6 +552,8 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 | 3 | 기존모터제어를 원래 아날로그(E1) 제어로 되돌리는 기능이 필요할까요? (h4 를 0 으로 되돌림) | 없음 |
 | 4 | 정전 후 모터가 다시 켜질 때 프로그램 없이도 마지막 속도로 돌게 하려면 h16 bit[3:1]=5 (펌웨어 11 이상, 영구저장) 설정이 필요합니다. 설정할까요? | 설정하지 않음 (프로그램이 켜져 있으면 다시 맞춤) |
 | 5 | 기존모터제어 모터의 실제 PIN 보호 단계·버스 주소·게이트웨이 IP 를 현장에서 확인해 주세요 | – |
+| 6 | 기존모터제어 구역 참조의 % 를 그 모터의 최고속도(h8) 기준으로 적용할까요? 모터 최고속도가 1100 이 아니면 결과가 다릅니다 (예: 70% → h8=1400 이면 980 RPM) | 1100 기준: 운전속도 = 1100 × % (미니 제어기와 같음, h4 절대 회전수 방식 유지) |
+| 7 | PORT 502 고정·입력칸 없애기와 '새 창은 프로그램 창 안에' 를 다른 프로그램(모터 스캐너·모터 시험기·미니 제어기·기존모터 시험기)에도 적용할까요? | 운영 프로그램만 적용 |
 
 ---
 
@@ -522,6 +561,8 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700
 
 | 버전 | 날짜 | 변경 내용 | 관련 ID |
 |---|---|---|---|
+| 2.4.0 | 2026-11-03 | **운영 프로그램 후속 요청 4건**: ① 제어 PORT 를 502 로 고정(`P-MODBUS-PORT`) ② PORT 입력칸·표시 없앰 (구역설정, 기존모터제어, 머리 영역, 툴팁, 에러 로그, 가져오기 미리보기. 설정 파일의 다른 PORT 는 무시하고 502 로 저장) ③ 기존모터제어 참조 = **구역 참조**: 이 구역 신규모터가 따르는 값을 그대로 써서 1100 대비 % 를 구하고 같은 비율(1100 × %)로 지정, 참조 IP/PORT/ID 입력 없앰, 값 없음이 60초 넘으면 이상표시, 자기 자신 참조 금지 ④ 새 창(대화상자·에러 로그·확인/알림)은 **프로그램 창 안**에 뜸 — 모니터 기준 위치·자르기 없앰, Windows 메시지 상자 대신 `DLG-MSG` | `P-MODBUS-PORT`, `DLG-LINE-TXT-SIP/TIP`, `DLG-MOTOR-TXT-CIP`, `-RB-CTRL-REF`, `-LBL-SETPCT`, `-LBL-ZONEREF`, `DLG-MSG`, `MSG-MOTOR-21`, 없앤 ID: `DLG-LINE-TXT-SPORT/TPORT`, `DLG-MOTOR-TXT-CPORT`, `-TXT-RIP/RPORT/RID`, `-BTN-REFZONE`, `MSG-LINE-03~05/08~10`, `MSG-MOTOR-13/17~20`, 2장 '창 위치', 4.5, 7.1, 7.3 |
+| 2.4.0 | 2026-11-03 | **운영 프로그램 변경 10건**: ① 신규모터 ID 1~30 ② 기존모터·기존모터제어 ID 1~249 ③⑧ 기존모터제어 운전속도에 참조 방식 추가 (후속 요청으로 **구역 참조**로 바뀜, 위 줄) ④ 아이콘 색: 기존모터 청색, 신규모터 주황색, 기존모터제어 녹색 ⑤ 모니터링 모드는 읽기만(참조모터 포함, 시험으로 확인) ⑥ 이상표시(빨간 !)는 다시 응답이 오면 바로 해제, 통신장치 접속 실패·끊김도 이상표시 ⑦ **에러 로그** 버튼·창(`SCR-ERRLOG`, `logs/error.log`) ⑨ 항상 모니터링 모드로 시작 ⑩ **설정 가져오기**: 운영 프로그램 Config.dll/uconfig.dll/Config.ini, 미니 제어기 mini_control.json | `P-NEW-ID-RANGE`, `P-CTRL-ID-RANGE`, `DLG-MOTOR-RB-CTRL-*`, `MAIN-BTN-ERRLOG`, `MAIN-BTN-IMPORT`, `SCR-ERRLOG`, `DLG-IMPORT-*`, `MSG-MAIN-11/12`, `MSG-IMPORT-*`, 4.2·4.4·4.5·7.1~7.3 |
 | 2.3.0 | 2026-10-22 | 운영 프로그램도 `update.bat` 으로 받기: 파일 하나짜리 빌드 `motor_monitor_onefile.spec` 과 워크플로 `build-monitor-exe.yml`(test_core·test_ui 시험 후 Release `exe-latest` 에 `BLDC_MOTOR_MONITOR.exe` 게시). 폴더형 빌드(`build_exe.bat`)는 그대로. 프로그램 동작 변경 없음 | `update.bat`, 2.2-1, 2.3 |
 | 2.3.0 | 2026-10-22 | `update.bat` 이 별도 실행파일(MOTOR_SCANNER·MOTOR_TESTER·MINI_CONTROL·ECBLUE_TESTER)도 최신으로 내려받아 교체. 빌드 워크플로 4개가 시험·빌드 후 Release `exe-latest` 에 exe 를 올림(로그인 없이 내려받기 가능). 프로그램 동작 변경 없음 | `update.bat`, 2.2-1 |
 | 2.3.0 | 2026-10-22 | **모터 스캐너 추가**: IP 의 ID 범위 스캔(기본 1~240), 제품코드로 ECblue 판별, ECblue 상태·설정(최고/최저 속도, Set Intern1~3, Limit, E1 범위) 변경, 통신 워치독(h17) 켜기/끄기/시험. 시뮬레이터 ECblue 레지스터를 제조사 문서 L-BAL-E076-GB 기준으로 확장(h0~h37, i0~i49, PIN 단계, 워치독). 운영 프로그램 동작 변경 없음 | 매뉴얼 15장 |

@@ -3,9 +3,11 @@
 Config.dll = 3DES 로 암호화한 INI 텍스트 (crypto3des.py).
 운영 프로그램과 같은 파일·같은 섹션/키 이름을 사용하므로 현장 Config.dll 을 그대로 읽고 쓸 수 있습니다.
 (키 이름의 오타 '_TARGEIP', '_TARGEPORT' 도 호환을 위해 그대로 유지)
+PORT 는 502 고정: 파일의 PORT 값은 읽지 않고(다르면 기록만 남김) 저장할 때도 502 를 씁니다.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -13,7 +15,8 @@ import tempfile
 from dataclasses import dataclass, replace
 from typing import Dict, List, NamedTuple, Tuple
 
-from .constants import CONFIG_FILE_NAME, DEFAULT_IP_PREFIX, DEFAULT_PORT, HOUSE_LINES, MotorType
+from .constants import (CONFIG_FILE_NAME, CTRL_MODE_MANUAL, CTRL_MODE_REF, DEFAULT_IP_PREFIX, HOUSE_LINES,
+                        MODBUS_PORT, MotorType, pct_to_rpm)
 from .crypto3des import decrypt_config, encrypt_config
 
 log = logging.getLogger(__name__)
@@ -31,9 +34,9 @@ class ConfigError(Exception):
 class LineConfig:
     """구역 1개의 통신/제어 설정."""
     source_ip: str          # 기존모터 IP
-    source_port: int        # 기존모터 PORT
+    source_port: int        # 기존모터 PORT (502 고정, 화면에 없음)
     target_ip: str          # 신규모터 IP
-    target_port: int        # 신규모터 PORT
+    target_port: int        # 신규모터 PORT (502 고정, 화면에 없음)
     source_manual: bool     # True: 수동 RPM / False: 기존모터 RPM 참조
     manual_rpm: int         # 수동 RPM 값
     source_line: str        # 참조 기존모터가 있는 구역 코드 (예: H1R1)
@@ -50,8 +53,9 @@ class MotorEntry(NamedTuple):
     use_limit: bool = False     # 속도제한 사용 (신규모터)
     limit_rpm: int = 0          # 속도제한 최대 RPM
     ip: str = ""                # 기존모터제어: 접속 IP
-    port: int = 0               # 기존모터제어: 접속 PORT
-    set_rpm: int = 0            # 기존모터제어: 지정 운전 속도 (RPM)
+    port: int = 0               # 기존모터제어: 접속 PORT (502 고정)
+    set_rpm: int = 0            # 기존모터제어: 지정 운전 속도 (RPM, 수동 지정)
+    ctrl_mode: str = CTRL_MODE_MANUAL   # 기존모터제어: 속도 지정 방법 (manual 수동 / ref 구역 참조)
 
 
 def app_base_dir() -> str:
@@ -126,24 +130,44 @@ def format_motor_list(motors: List[MotorEntry]) -> str:
         for m in motors if m.mtype != MotorType.OLD_CTRL)
 
 
+CTRL_REF_TAG = "REF"   # 기존모터제어 항목의 4번째 값: 구역 참조
+
+
 def parse_ctrl_list(data: str) -> List[MotorEntry]:
-    """'2@172.27.0.82:502=1=700,...' -> 기존모터제어 목록 (ID@IP:PORT=사용=운전속도)."""
+    """기존모터제어 목록. 항목: 'ID@IP:502=사용=운전속도' (수동 지정)
+    또는 'ID@IP:502=사용=운전속도=REF' (구역 참조).
+    PORT 는 502 고정(적힌 값은 쓰지 않음). 예전 형식 '…=R참조ID@참조IP:참조PORT' 도 구역 참조로 읽음."""
     result: List[MotorEntry] = []
     for item in filter(None, data.split(",")):
         try:
-            head, use, rpm = item.split("=")
-            mid, addr = head.split("@")
-            ip, port = addr.rsplit(":", 1)
-            result.append(MotorEntry(int(mid), MotorType.OLD_CTRL, use.strip() != "0",
-                                     ip=ip.strip(), port=int(port), set_rpm=int(rpm)))
+            parts = item.split("=")
+            if len(parts) not in (3, 4):
+                raise ValueError
+            mid, addr = parts[0].split("@")
+            ip = addr.rsplit(":", 1)[0].strip()
+            if not ip:
+                raise ValueError
+            mode = CTRL_MODE_MANUAL
+            if len(parts) == 4:
+                if not parts[3].strip().upper().startswith("R"):
+                    raise ValueError
+                mode = CTRL_MODE_REF
+            result.append(MotorEntry(int(mid), MotorType.OLD_CTRL, parts[1].strip() != "0",
+                                     ip=ip, port=MODBUS_PORT, set_rpm=int(parts[2]), ctrl_mode=mode))
         except ValueError:
             log.warning("기존모터제어 설정 형식 오류(무시): %r", item)
     return result
 
 
+def _format_ctrl(m: MotorEntry) -> str:
+    s = f"{m.id}@{m.ip}:{MODBUS_PORT}={1 if m.use else 0}={m.set_rpm}"
+    if m.ctrl_mode == CTRL_MODE_REF:
+        s += f"={CTRL_REF_TAG}"
+    return s
+
+
 def format_ctrl_list(motors: List[MotorEntry]) -> str:
-    return ",".join(f"{m.id}@{m.ip}:{m.port}={1 if m.use else 0}={m.set_rpm}"
-                    for m in motors if m.mtype == MotorType.OLD_CTRL)
+    return ",".join(_format_ctrl(m) for m in motors if m.mtype == MotorType.OLD_CTRL)
 
 
 def read_config_text(path: str) -> str:
@@ -160,16 +184,29 @@ def read_config_text(path: str) -> str:
 
 def load_config(path: str) -> Tuple[Dict[str, LineConfig], Dict[str, List[MotorEntry]]]:
     """설정 읽기. 값이 없으면 운영 프로그램과 같은 기본값."""
-    ini = parse_ini(read_config_text(path))
+    return config_from_text(read_config_text(path))
+
+
+def _fixed_port(ini, key: str) -> int:
+    """PORT 는 502 고정. 파일에 다른 값이 있으면 로그에 남기고 502 를 씀."""
+    raw = _ini_read(ini, SEC_LINE, key, str(MODBUS_PORT))
+    if _to_int(raw, MODBUS_PORT) != MODBUS_PORT:
+        log.warning("설정 파일 %s=%s 대신 %d 사용 (PORT 는 502 고정)", key, raw, MODBUS_PORT)
+    return MODBUS_PORT
+
+
+def config_from_text(text: str) -> Tuple[Dict[str, LineConfig], Dict[str, List[MotorEntry]]]:
+    """INI 텍스트 -> (구역 설정, 구역별 모터 목록). 값이 없으면 운영 프로그램과 같은 기본값."""
+    ini = parse_ini(text)
     configs: Dict[str, LineConfig] = {}
     motors: Dict[str, List[MotorEntry]] = {}
     idx = 1
     for s in HOUSE_LINES:
         configs[s] = LineConfig(
             source_ip=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_IP", f"{DEFAULT_IP_PREFIX}{idx}"),
-            source_port=_to_int(_ini_read(ini, SEC_LINE, f"{s}_SOURCE_PORT", str(DEFAULT_PORT))),
+            source_port=_fixed_port(ini, f"{s}_SOURCE_PORT"),
             target_ip=_ini_read(ini, SEC_LINE, f"{s}_TARGEIP", f"{DEFAULT_IP_PREFIX}{idx + 1}"),
-            target_port=_to_int(_ini_read(ini, SEC_LINE, f"{s}_TARGEPORT", str(DEFAULT_PORT))),
+            target_port=_fixed_port(ini, f"{s}_TARGEPORT"),
             source_manual=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_MANUAL", "1") != "0",
             manual_rpm=_to_int(_ini_read(ini, SEC_LINE, f"{s}_MANUAL_RPM", "0")),
             source_line=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_LINE", ""),
@@ -188,9 +225,9 @@ def build_config_text(configs: Dict[str, LineConfig], motors: Dict[str, List[Mot
         c = configs[s]
         lines += [
             f"{s}_SOURCE_IP={c.source_ip}",
-            f"{s}_SOURCE_PORT={c.source_port}",
+            f"{s}_SOURCE_PORT={MODBUS_PORT}",
             f"{s}_TARGEIP={c.target_ip}",
-            f"{s}_TARGEPORT={c.target_port}",
+            f"{s}_TARGEPORT={MODBUS_PORT}",
             f"{s}_SOURCE_MANUAL={1 if c.source_manual else 0}",
             f"{s}_MANUAL_RPM={c.manual_rpm}",
             f"{s}_SOURCE_LINE={c.source_line}",
@@ -223,6 +260,75 @@ def save_config(path: str, configs: Dict[str, LineConfig], motors: Dict[str, Lis
         except OSError:
             pass
         raise
+
+
+# ------------------------------------------------------------------ 다른 프로그램 설정 가져오기
+def read_any_config_text(path: str) -> str:
+    """운영 프로그램 설정 파일을 INI 텍스트로 읽음.
+    Config.dll(3DES 암호화) / uconfig.dll(저장 중 남은 평문) / Config.ini(구버전 평문) 모두 가능.
+    [LINE_CONFIG] 나 [MOTOR_CONFIG] 가 없으면 ConfigError."""
+    with open(path, "rb") as f:
+        raw = f.read()
+    candidates = []
+    try:
+        candidates.append(decrypt_config(raw))
+    except (ValueError, UnicodeDecodeError):
+        pass
+    for enc in ("utf-8-sig", "cp949"):
+        try:
+            candidates.append(raw.decode(enc))
+        except UnicodeDecodeError:
+            pass
+    for text in candidates:
+        ini = parse_ini(text)
+        if SEC_LINE in ini or SEC_MOTOR in ini:
+            return text
+    raise ConfigError(f"운영 프로그램 설정 파일이 아니거나 해독할 수 없습니다: {path}")
+
+
+@dataclass
+class MiniItem:
+    """미니 제어기(mini_control.json) 항목 1개."""
+    ip: str
+    uid: int
+    mode: str          # "pct" 속도 % / "ref" 참조팬
+    pct: float
+    ref_ip: str
+    ref_uid: int
+
+    @property
+    def rpm(self) -> int:
+        """속도 % -> RPM (미니 제어기와 같은 계산: 100% = MAX_RPM)"""
+        return pct_to_rpm(self.pct)
+
+    @property
+    def is_ref(self) -> bool:
+        return self.mode == "ref"
+
+
+def read_mini_items(path: str) -> List[MiniItem]:
+    """미니 제어기 항목 파일(mini_control.json) 읽기. 형식이 틀리면 ConfigError."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            raise ValueError("항목 목록(list)이 아님")
+        items = [MiniItem(str(d["ip"]).strip(), int(d["uid"]), str(d.get("mode", "pct")),
+                          float(d.get("pct", 0)), str(d.get("ref_ip", "")).strip(), int(d.get("ref_uid", 0)))
+                 for d in data]
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise ConfigError(f"미니 제어기 항목 파일이 아닙니다: {path} ({e})") from e
+    return items
+
+
+def mini_item_to_entry(it: MiniItem) -> MotorEntry:
+    """미니 제어기 항목 -> 기존모터제어.
+    속도 % 항목은 수동 지정 RPM(100% = MAX_RPM), 참조팬 항목은 구역 참조
+    (운영 프로그램의 참조는 그 구역 신규모터가 따르는 값이므로, 미니 제어기에 지정한 참조팬 IP·ID 는 쓰지 않음)."""
+    if it.is_ref:
+        return MotorEntry(it.uid, MotorType.OLD_CTRL, True, ip=it.ip, port=MODBUS_PORT, set_rpm=0,
+                          ctrl_mode=CTRL_MODE_REF)
+    return MotorEntry(it.uid, MotorType.OLD_CTRL, True, ip=it.ip, port=MODBUS_PORT, set_rpm=it.rpm)
 
 
 def export_plain_text(path: str) -> str:
