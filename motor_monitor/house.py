@@ -989,16 +989,6 @@ class HouseLine:
                     cur.target_rpm = target           # 표시용
         if hold_ok and not self.monitoring and target is not None:
             h1, h2, _h3, h4 = hold.values[:4]
-            # 모터 최고속도(h8)보다 높은 설정 속도는 h8 로 제한됨(문서 3.4.6 주2) -> 알림만 (보내는 값은 그대로).
-            # 속도를 보내는 제어 모드에서만 판단 (모니터링 모드에서는 이 프로그램이 보낸 속도가 아니므로 그대로 둠)
-            with self._lock:
-                cur = self._motors.get(key)
-                if cur is not None:
-                    if 0 < max_rpm < target:
-                        self._set_speed_note(cur, f"모터 최고속도(h8) {max_rpm} RPM 이 설정 {target} RPM 보다 낮아 "
-                                                  f"최고속도로 운전 (모터 스캐너의 ECblue 설정에서 최고속도 확인)")
-                    else:
-                        self._set_speed_note(cur, "")
             # 3) 제어모드: h2 절대 회전수 + 버스 Enable (영구저장 NV 레지스터 -> 다를 때만, 시도 횟수 제한)
             if not modbus.ecb_mode_ok(h4):
                 with self._lock:
@@ -1019,7 +1009,17 @@ class HouseLine:
             if not h1 & modbus.ECB_ENABLE_BIT:
                 if not self._ctrl_write(link, m, modbus.ECB_H_CONTROL, h1 | modbus.ECB_ENABLE_BIT, stop, links):
                     note = note or "운전 허가(h1) 쓰기 실패"
-            # 5) 운전속도: 설정 속도를 그대로 (모터가 가진 값과 다를 때만)
+            # 5) 운전속도: 설정 속도를 그대로 (모터가 가진 값과 다를 때만).
+            #    모터 최고속도(h8)보다 높은 설정 속도는 h8 로 제한됨(문서 3.4.6 주2) -> 알림만 (보내는 값은 그대로).
+            #    속도를 보내는 제어 모드에서만 판단 (모니터링 모드에서는 이 프로그램이 보낸 속도가 아니므로 그대로 둠)
+            with self._lock:
+                cur = self._motors.get(key)
+                if cur is not None:
+                    if 0 < max_rpm < target:
+                        self._set_speed_note(cur, f"모터 최고속도(h8) {max_rpm} RPM 이 설정 {target} RPM 보다 낮아 "
+                                                  f"최고속도로 운전 (모터 스캐너의 ECblue 설정에서 최고속도 확인)")
+                    else:
+                        self._set_speed_note(cur, "")
             if h2 != target:
                 self._mark_sent(key)
                 if self._ctrl_write(link, m, modbus.ECB_H_SPEED, target, stop, links):

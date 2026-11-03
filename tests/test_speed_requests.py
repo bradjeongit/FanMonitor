@@ -308,9 +308,10 @@ def test_ctrl_motor_reads_max_speed_and_shows_percent(tmp_path, fast):
         h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, set_rpm=700)
         key = f"2_2@{gw.host}:{gw.port}"
         p.start_line("H1R1")
-        assert _wait(lambda: "최고속도(h8) 600" in h.get_motor(key).speed_note)
+        # 알림과 h2 쓰기는 같은 점검 안에서 차례로 일어나므로 둘 다 될 때까지 기다림 (통신이 느린 PC 에서도)
+        assert _wait(lambda: gw.ecb[2]["h"][2] == 700 and "최고속도(h8) 600" in h.get_motor(key).speed_note)
         m = h.get_motor(key)
-        assert m.max_rpm == 600 and gw.ecb[2]["h"][2] == 700 and gw.ecb_speed(2) == 600 and m.has_problem
+        assert m.max_rpm == 600 and gw.ecb_speed(2) == 600 and m.has_problem
         assert any("최고속도(h8) 600" in e.message for e in p.errors.recent())
         from motor_monitor.ui.widgets import MotorListView
         assert "모터 최고속도(h8) 600 RPM: 설정 700 RPM = 최고속도의 116.7%" in MotorListView.type_icon(m)[1]
