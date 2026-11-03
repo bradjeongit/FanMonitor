@@ -12,9 +12,8 @@
   최고속도 MAX_RPM 대비 % 로 바꿔 같은 비율(MAX_RPM × %)로 지정. 값이 없으면 이전 속도를 유지
 - 점검 주기(CHECK_INTERVAL, 30초): 모터마다 30초에 한 번 읽고 필요하면 맞춤. 설정을 바꾸거나 제어 모드로
   바꾸면(kick) 기다리지 않고 바로 한 번 점검. 쓰기 명령은 생기는 대로 바로 보냄
-- 속도 보정(speedtrim.Trim): 신규모터·기존모터제어는 실제 속도가 설정 속도의 1% 이내면 오차로 인정하고,
-  1% 넘게 느리면 지정값을 조금씩 올림(최대값 이하). 올려도 60초 동안 속도가 그대로면 더 보내지 않고 알림.
-  오차 안에 든 지정값은 기억(plant.memory, speed_memory.json)했다가 다음 실행의 최초 신호로 보냄
+- 속도 지정: 신규모터·기존모터제어에는 목표 속도(설정 속도)를 그대로 보냄 (모터가 가진 값과 다를 때만).
+  실제 속도로 지정값을 바꾸는 보정은 하지 않음 (2.5.0 의 속도 보정·기억은 2.5.1 에서 삭제)
 - 에러 기록(plant.errors): 접속 실패·연결 끊김·응답 없음·쓰기 실패와 그 복구를 상태가 바뀔 때만 기록
 - 모니터링 모드(plant.monitoring): 읽기만 하고 쓰기(제어) 명령은 만들지도 보내지도 않음
   (화면에서 실행 중에 바꿀 수 있으며, 매 명령마다 현재 모드를 다시 확인)
@@ -34,7 +33,6 @@ from . import modbus
 from .config import MotorEntry
 from .constants import CTRL_MODE_MANUAL, CTRL_MODE_REF, MotorStatus, MotorType
 from .helpers import get_house_name
-from .speedtrim import Trim
 
 if TYPE_CHECKING:
     from .plant import Plant
@@ -77,11 +75,10 @@ class Motor:
     ctrl_target: Optional[int] = None  # 기존모터제어: 마지막으로 정한 운전속도 (구역 참조값이 없을 때 유지)
     mode_tries: int = 0               # 기존모터제어: 제어모드(h4, NV) 설정 시도 횟수
     ctrl_note: str = ""               # 기존모터제어: 마지막 제어 문제 설명 (있으면 이상표시)
-    # 속도 점검·보정 (신규모터·기존모터제어, 표시용)
+    # 속도 점검 (신규모터·기존모터제어, 표시용)
     target_rpm: Optional[int] = None  # 설정 속도 (이 모터가 돌아야 할 속도)
     cmd_rpm: Optional[int] = None     # 지정값 (모터에 보낸/모터가 가진 값: 신규모터 0x16, 기존모터제어 h2)
-    actual_at: Optional[float] = None  # 실제 속도(rpm)를 읽은 시각
-    speed_note: str = ""              # 속도 문제 (보정해도 설정 속도에 못 미침). 있으면 이상 행으로 표시
+    speed_note: str = ""              # 속도 문제 (기존모터제어: 모터 최고속도 h8 이 설정 속도보다 낮음). 있으면 이상 행
     max_rpm: int = 0                  # 기존모터제어: 모터 최고속도 h8 (1/min, 0 = 설정 없음/모름)
     sent_at: Optional[float] = None   # 속도 변경을 보낸 시각 (화면에서 아이콘을 붉게 깜빡임)
 
@@ -235,7 +232,6 @@ class HouseLine:
         self._stop = threading.Event()
         self._stop.set()
         self._threads: Dict[str, threading.Thread] = {}
-        self._trims: Dict[str, Trim] = {}     # 모터별 속도 보정 상태 (신규모터·기존모터제어)
         self._kick_gen = 0                    # 늘어나면 각 통신 쓰레드가 30초를 기다리지 않고 바로 점검
 
     # ------------------------------------------------------------------ 상태
@@ -306,7 +302,6 @@ class HouseLine:
             if dkey not in self._motors:
                 return False
             del self._motors[dkey]
-            self._trims.pop(dkey, None)
             if dkey in self._order:
                 self._order.remove(dkey)
             self._resort()
@@ -450,7 +445,7 @@ class HouseLine:
             self._touch()
 
     def _set_speed_note(self, m: Motor, note: str) -> None:
-        """속도 문제 표시 켜기/끄기 (lock 안에서 호출). 보정해도 설정 속도에 못 미칠 때. 바뀔 때만 기록."""
+        """속도 문제 표시 켜기/끄기 (lock 안에서 호출). 모터 최고속도가 설정 속도보다 낮을 때. 바뀔 때만 기록."""
         if note == m.speed_note:
             return
         if note:
@@ -459,39 +454,6 @@ class HouseLine:
             self._log_recover(m.label, "속도 문제 해제")
         m.speed_note = note
         self._touch()
-
-    def _mem_key(self, m: Motor) -> str:
-        return f"{self.code}/{m.key}"
-
-    def _memory(self):
-        return getattr(self.plant, "memory", None)
-
-    def _trim_for(self, m: Motor) -> Trim:
-        return self._trims.setdefault(m.key, Trim())
-
-    def _trim_speed(self, m: Motor, target: Optional[int], actual: Optional[int], cmd_max: int,
-                    extra_note: str = "") -> Optional[int]:
-        """속도 점검 1번 (lock 밖에서 호출): 보낼 지정값을 정하고 기억·속도 문제 표시를 갱신.
-        target 이 None 이면(설정 속도를 아직 모름) 최초 한 번만 기억한 지정값. 보낼 값이 없으면 None.
-        extra_note: 보정과 따로 알릴 속도 문제 (예: 모터 최고속도가 설정 속도보다 낮음)."""
-        mem = self._memory()
-        key = self._mem_key(m)
-        remembered = mem.get(key) if mem is not None else None
-        trim = self._trim_for(m)
-        if target is None:
-            cmd = trim.first_signal(remembered)
-        else:
-            cmd = trim.decide(target, actual, cmd_max, remembered)
-            if trim.learned and mem is not None:
-                mem.remember(key, trim.target, trim.cmd)
-        with self._lock:
-            cur = self._motors.get(m.key)
-            if cur is not None:
-                cur.target_rpm = trim.target
-                if target is not None:
-                    self._set_speed_note(cur, extra_note or trim.note)
-                self._touch()
-        return cmd
 
     def _mark_sent(self, key: str) -> None:
         """속도 변경을 보냄 (화면 아이콘 깜빡임)."""
@@ -551,10 +513,8 @@ class HouseLine:
                 m.rdate = None
                 m.target_rpm = None
                 m.cmd_rpm = None
-                m.actual_at = None
                 m.speed_note = ""
                 m.status = MotorStatus.READY if m.use else MotorStatus.NOTUSE
-            self._trims.clear()                # 보정은 새로 시작 (최초 신호는 기억한 값)
             self._touch()
         for ch in (self.source, self.target):
             ch.net_status = False
@@ -817,7 +777,6 @@ class HouseLine:
             with self._lock:
                 m = self._motors.get(motor_key(MotorType.NEW_MOTOR, p1.unit_id))
                 if m is not None:
-                    m.actual_at = time.monotonic()
                     self._mark_received(m, p1.actual_rpm)
             return
         r = modbus.parse_new_response(frame)
@@ -830,34 +789,28 @@ class HouseLine:
                 return
             m.cmd_rpm = r.rpm                     # 모터가 가진 지정값(0x16) - 표시용
             snap = replace(m)
-        # 설정 속도 = 구역 목표 RPM, 속도제한 사용 시 최대속도 이하. 지정값도 그 최대값을 넘지 않음
-        cmd_max = max(0, min(snap.limit_rpm, C.MAX_RPM)) if snap.use_limit else C.MAX_RPM
+        # 설정 속도 = 구역 목표 RPM, 속도제한 사용 시 최대속도 이하
         setting = self.resolve_setting_rpm()
-        target = None if setting is None else min(setting, cmd_max)
-        if self.monitoring:
-            with self._lock:
-                cur = self._motors.get(dkey)
-                if cur is not None:
-                    cur.target_rpm = target       # 모니터링 모드: 표시만 (쓰기·보정 없음)
-        else:
-            # 실제 속도(1페이지)는 이번 점검에서 읽은 값만 씀. 수동·동작이 아니면(곧 바꿈) 판단하지 않음
-            fresh = snap.actual_at is not None and time.monotonic() - snap.actual_at < max(C.CHECK_INTERVAL / 2, 1.0)
-            ready = r.automanual == 1 and r.startstop == 1
-            cmd = self._trim_speed(snap, target, snap.rpm if (fresh and ready) else None, cmd_max)
-            if cmd is not None:
-                mid = r.unit_id
-                if r.automanual != 1:
-                    self._enqueue_write(_QueueItem(dkey, mid, modbus.build_new_manual_write(self._next_tgt_idx(), mid)))
-                if r.startstop != 1:
-                    self._enqueue_write(_QueueItem(dkey, mid, modbus.build_new_run_write(self._next_tgt_idx(), mid)))
-                self._debug(mid, f"[{self.code}][{mid}]-설정RPM:{target} 지정:{cmd} 실제:{snap.rpm}")
-                if r.rpm != cmd:
-                    self._enqueue_write(
-                        _QueueItem(dkey, mid, modbus.build_new_rpm_write(self._next_tgt_idx(), mid, cmd), speed=True))
-                    with self._lock:
-                        cur = self._motors.get(dkey)
-                        if cur is not None:
-                            cur.cmd_rpm = cmd
+        if setting is not None and snap.use_limit and setting > snap.limit_rpm:
+            setting = snap.limit_rpm              # 속도제한: 최대속도 이하로
+        with self._lock:
+            cur = self._motors.get(dkey)
+            if cur is not None:
+                cur.target_rpm = setting          # 표시용
+        if setting is not None and not self.monitoring:
+            mid = r.unit_id
+            if r.automanual != 1:
+                self._enqueue_write(_QueueItem(dkey, mid, modbus.build_new_manual_write(self._next_tgt_idx(), mid)))
+            if r.startstop != 1:
+                self._enqueue_write(_QueueItem(dkey, mid, modbus.build_new_run_write(self._next_tgt_idx(), mid)))
+            self._debug(mid, f"[{self.code}][{mid}]-제어RPM:{setting}")
+            if r.rpm != setting:                  # 목표를 그대로 (모터가 가진 값과 다를 때만)
+                self._enqueue_write(
+                    _QueueItem(dkey, mid, modbus.build_new_rpm_write(self._next_tgt_idx(), mid, setting), speed=True))
+                with self._lock:
+                    cur = self._motors.get(dkey)
+                    if cur is not None:
+                        cur.cmd_rpm = setting
         with self._lock:
             m = self._motors.get(dkey)
             if m is not None:
@@ -1024,7 +977,6 @@ class HouseLine:
             with self._lock:
                 cur = self._motors.get(key)
                 if cur is not None:
-                    cur.actual_at = time.monotonic()
                     self._mark_received(cur, actual)
         hold_ok = hold is not None and hold.exception is None and len(hold.values) >= 4
         max_rpm = hold.values[7] if hold_ok and len(hold.values) >= 8 else 0      # h8 최고속도 (0 = 설정 없음)
@@ -1034,14 +986,9 @@ class HouseLine:
                 if cur is not None:
                     cur.cmd_rpm = hold.values[1]      # 모터가 가진 지정값(h2) - 표시용
                     cur.max_rpm = max_rpm
-                    if self.monitoring:
-                        cur.target_rpm = target       # 모니터링 모드: 표시만
-        mem = self._memory()
-        has_cmd = (target is not None or self._trim_for(m).cmd is not None
-                   or (mem is not None and mem.get(self._mem_key(m)) is not None))
-        if hold_ok and not self.monitoring and has_cmd:
+                    cur.target_rpm = target           # 표시용
+        if hold_ok and not self.monitoring and target is not None:
             h1, h2, _h3, h4 = hold.values[:4]
-            changed = False                           # 이번에 운전 방식·허가를 바꿨으면 실제 속도로 판단하지 않음
             # 3) 제어모드: h2 절대 회전수 + 버스 Enable (영구저장 NV 레지스터 -> 다를 때만, 시도 횟수 제한)
             if not modbus.ecb_mode_ok(h4):
                 with self._lock:
@@ -1055,33 +1002,33 @@ class HouseLine:
                     log.info("[%s][기존모터제어 ID%s %s] 제어모드 변경 h4: %s -> %s", self.code, m.id, m.ip,
                              h4, modbus.ecb_mode_value(h4))
                     self._ctrl_write(link, m, modbus.ECB_H_PIN, modbus.ECB_PIN_LEVEL2, stop, links)
-                    changed = True
                     if not self._ctrl_write(link, m, modbus.ECB_H_CONTROLMODE, modbus.ecb_mode_value(h4), stop,
                                             links):
                         note = "제어모드 설정 실패"
             # 4) Enable
             if not h1 & modbus.ECB_ENABLE_BIT:
-                changed = True
                 if not self._ctrl_write(link, m, modbus.ECB_H_CONTROL, h1 | modbus.ECB_ENABLE_BIT, stop, links):
                     note = note or "운전 허가(h1) 쓰기 실패"
-            # 5) 운전속도: 설정 속도에서 보정한 지정값 (오차 1% 이내면 그대로, 느리면 조금씩 올림).
-            #    모터 최고속도(h8)를 넘는 지정은 효과가 없으므로(문서 3.4.6 주2) 보정 상한 = min(1100, h8).
-            #    설정 속도가 h8 보다 높으면 h8 로 운전하고 알림 (모터 설정의 최고속도 확인 필요)
-            cmd_max = min(C.MAX_RPM, max_rpm) if max_rpm > 0 else C.MAX_RPM
-            max_note = ""
-            if target is not None and target > cmd_max:
-                max_note = (f"모터 최고속도(h8) {max_rpm} RPM 이 설정 {target} RPM 보다 낮아 최고속도로 운전 "
-                            f"(모터 스캐너의 ECblue 설정에서 최고속도 확인)")
-            cmd = self._trim_speed(m, target, None if changed else actual, cmd_max, max_note)
-            if cmd is not None and h2 != cmd:
+            # 5) 운전속도: 설정 속도를 그대로 (모터가 가진 값과 다를 때만).
+            #    모터 최고속도(h8)보다 높은 설정 속도는 h8 로 제한됨(문서 3.4.6 주2) -> 알림만 (보내는 값은 그대로).
+            #    속도를 보내는 제어 모드에서만 판단 (모니터링 모드에서는 이 프로그램이 보낸 속도가 아니므로 그대로 둠)
+            with self._lock:
+                cur = self._motors.get(key)
+                if cur is not None:
+                    if 0 < max_rpm < target:
+                        self._set_speed_note(cur, f"모터 최고속도(h8) {max_rpm} RPM 이 설정 {target} RPM 보다 낮아 "
+                                                  f"최고속도로 운전 (모터 스캐너의 ECblue 설정에서 최고속도 확인)")
+                    else:
+                        self._set_speed_note(cur, "")
+            if h2 != target:
                 self._mark_sent(key)
-                if self._ctrl_write(link, m, modbus.ECB_H_SPEED, cmd, stop, links):
+                if self._ctrl_write(link, m, modbus.ECB_H_SPEED, target, stop, links):
                     with self._lock:
                         cur = self._motors.get(key)
                         if cur is not None:
-                            cur.cmd_rpm = cmd
+                            cur.cmd_rpm = target
                 else:
-                    note = note or f"운전속도(h2) {cmd} RPM 쓰기 실패"
+                    note = note or f"운전속도(h2) {target} RPM 쓰기 실패"
         with self._lock:
             cur = self._motors.get(key)
             if cur is None:

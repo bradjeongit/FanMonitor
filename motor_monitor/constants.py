@@ -32,15 +32,11 @@ ERROR_RETRY_DELAY = 1.0         # 송신 중 예외 발생 후 대기
 RESTART_DELAY = 1.0             # 재시작 시 중지~시작 사이 대기
 CMD_IDX_MAX = 9999              # 트랜잭션 번호 최대값(초과 시 0)
 
-# ---- 팬 속도 점검·보정 (speedtrim.py) ----
-CHECK_INTERVAL = 30             # 팬 속도 점검 주기(초): 모터마다 30초에 한 번 읽고 필요하면 맞춤.
+# ---- 팬 속도 점검 ----
+CHECK_INTERVAL = 30             # 팬 속도 점검 주기(초): 모터마다 30초에 한 번 읽고, 목표와 다르면 목표를 보냄.
                                 #   설정을 바꾸거나 제어 모드로 바꾸면 기다리지 않고 바로 한 번 점검
-SPEED_TOLERANCE_PCT = 1.0       # 설정 속도와의 차이가 이 % 이내면 오차로 인정 (보정하지 않음).
-                                #   설정 속도가 이 % 이내로 바뀌어도 신호를 다시 보내지 않음
-SPEED_STEP_MIN_PCT = 2.0        # 느릴 때 한 번에 올리는 양: 설정 속도의 2~3% ('조금씩').
-SPEED_STEP_MAX_PCT = 3.0        #   최소값은 오차 범위(1%)보다 커야 올린 뒤 반응을 확인할 수 있음
-SPEED_STALL_CHECKS = 2          # 올린 뒤 이 횟수(30초 x 2 = 60초) 동안 속도가 바뀌지 않으면 더 보내지 않음
-SPEED_MEMORY_FILE = "speed_memory.json"   # 오차 안에 든 지정값 기억 (다음 실행의 최초 신호, Config.dll 옆)
+SPEED_TOLERANCE_PCT = 1.0       # 화면 표시용: 실제 속도가 설정 속도의 이 % 이내면 '오차 1% 이내' 로 표시
+                                #   (2.5.0 의 속도 보정·기억은 2.5.1 에서 삭제 - 목표 속도를 그대로 보냄)
 
 # ---- 네트워크 ----
 # Modbus TCP 포트. 모든 통신장치(게이트웨이)와 ECblue 모터가 502 를 쓰므로 고정합니다.
@@ -91,6 +87,11 @@ def pct_to_rpm(pct: float) -> int:
 def pct_text(pct: float) -> str:
     """70.0 -> '70%', 63.636 -> '63.6%'"""
     return f"{round(pct, 1):g}%"
+
+
+def speed_within(actual: int, target: int) -> bool:
+    """실제 속도가 설정 속도의 SPEED_TOLERANCE_PCT(1%) 이내인지 (화면 표시용)."""
+    return abs(actual - target) <= abs(target) * SPEED_TOLERANCE_PCT / 100.0
 
 
 def id_range(mtype: "MotorType") -> tuple:
