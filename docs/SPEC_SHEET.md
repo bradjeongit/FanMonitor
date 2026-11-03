@@ -56,7 +56,7 @@
 | `DLG-IMPORT-MINI` | 미니 제어기 목록 가져오기 창 (7.3절, 매뉴얼 4.6절) | `MAIN-BTN-IMPORT` → 미니 제어기 목록 | 640×430, 모달 | `tools.py` / `MiniImportDialog` | – (신규) |
 | `DLG-MSG` | 메시지 창 (확인 예/아니오, 알림 확인). `MSG-*` 문구를 보여 줌 | 확인·오류가 필요할 때 | 폭 460, 높이는 문구에 맞춤, 모달. Enter = 첫 버튼(예/확인), Esc·닫기 = 아니오 | `dialogs.py` / `MessageDialog`, 호출은 `ui/msgbox.py` (`ask_yes_no`, `show_info`, `show_warning`, `show_error`) | Windows 메시지 상자 |
 
-**창 위치** (`dialogs.place_inside` / `inside_position`): 모든 새 창(`DLG-*`, `SCR-ERRLOG`, `DLG-MSG`)은 **부모 창 가운데**에 두고 **메인 창(`SCR-MAIN`) 밖으로 나가지 않게** 맞춥니다(새 창이 더 크면 메인 창 왼쪽 위). 화면(모니터) 크기로 자르지 않으므로 메인 창이 다른 모니터(음수 좌표 포함)에 있으면 그 모니터에 뜹니다. 창 크기가 바뀌어도(`DLG-MOTOR` 340→460) 메인 창 안에 머뭅니다(`keep_inside_owner`). 메시지 창을 닫으면 그 아래 대화상자가 다시 입력을 받습니다. 예외: 파일 선택 창(OS 표준, 메인 창에 붙어서 뜸)과 메인 창이 생기기 전의 `MSG-MAIN-01`·`06`(OS 메시지 상자).
+**창 위치** (`dialogs.place_inside` / `inside_position`): 모든 새 창(`DLG-*`, `SCR-ERRLOG`, `DLG-MSG`)은 **부모 창 가운데**에 두고 **메인 창(`SCR-MAIN`) 밖으로 나가지 않게** 맞춥니다(새 창이 더 크면 메인 창 왼쪽 위). 화면(모니터) 크기로 자르지 않으므로 메인 창이 다른 모니터(음수 좌표 포함)에 있으면 그 모니터에 뜹니다. 창 크기가 바뀌어도(`DLG-MOTOR` 340→460) 메인 창 안에 머뭅니다(`keep_inside_owner`). 메시지 창을 닫으면 그 아래 대화상자가 다시 입력을 받습니다. 예외: 파일 선택 창(OS 표준 창이라 위치는 OS 가 정함, 부모 창은 메인 창으로 지정)과 메인 창이 생기기 전의 `MSG-MAIN-01`·`06`(OS 메시지 상자).
 
 ---
 
