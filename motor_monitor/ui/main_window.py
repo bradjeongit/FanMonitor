@@ -133,7 +133,7 @@ class ZonePanel(tk.Frame):
     def open_settings(self) -> None:
         """설정(톱니) 버튼 -> 구역설정 창"""
         LineSettingsDialog(self.app.root, self.app.plant, self.code,
-                           on_saved=self.app.update_header_box).show_modal()
+                           on_saved=self.app.after_line_saved).show_modal()
 
     def open_add(self) -> None:
         """추가(+) 버튼 -> 모터 추가 창"""
@@ -269,6 +269,11 @@ class MainWindow:
         self.update_header_box()
         self.refresh_lists(force=True)
         self.update_network_status()
+
+    def after_line_saved(self) -> None:
+        """구역설정 저장 후: 머리 영역 문구와 목록(신규모터의 수동/참조 표시)을 바로 갱신."""
+        self.update_header_box()
+        self.refresh_lists(force=True)
 
     def import_config_file(self, path: Optional[str] = None) -> None:
         """운영 프로그램(BLDC_MOTOR_MONITOR) 설정 파일 가져오기 (DLG-IMPORT-CFG)."""

@@ -295,7 +295,7 @@ def test_problem_rows_are_shaded(shown_root):
     assert MotorListView.status_icon(ok)[1] == "정상\n설정 800 · 지정 800 · 실제 800 RPM (오차 1% 이내)"
 
 
-# ---------------------------------------------------------------- 추가: 모터 최고속도(h8) 기준 %, 속도 보낼 때 깜빡임
+# ---------------------------------------------------------------- 추가: 모터 최고속도(h8) 기준 %, 속도 보낼 때 붉은 표시
 def test_ctrl_motor_reads_max_speed_and_shows_percent(tmp_path, fast):
     """ECblue 최고속도(h8) 600 인데 설정 700: 설정 700 을 그대로 보내고(모터가 600 으로 제한) 알림.
     최고속도 대비 % 를 보여줌."""
@@ -347,7 +347,7 @@ def test_max_speed_alert_only_in_control_mode(tmp_path, fast):
         gw.stop()
 
 
-def test_speed_send_marks_motor_for_blink(tmp_path, fast):
+def test_speed_send_marks_motor(tmp_path, fast):
     gw = FakeGateway().start()
     gw.add_new(5)
     try:
@@ -360,13 +360,18 @@ def test_speed_send_marks_motor_for_blink(tmp_path, fast):
         assert _wait(lambda: h.get_motor("1_5").sent_at is not None)      # 속도(0x16)를 보냄
         first = h.get_motor("1_5").sent_at
         time.sleep(0.5)
-        assert h.get_motor("1_5").sent_at == first                       # 같은 값 -> 다시 보내지 않음, 깜빡임 없음
+        assert h.get_motor("1_5").sent_at == first                       # 같은 값 -> 다시 보내지 않음, 붉은 표시 없음
         h.service_stop(join=True)
     finally:
         gw.stop()
 
 
-def test_icon_blinks_red_twice_in_one_second(shown_root):
+def _row_fills(lv):
+    return {lv.canvas.gettags(i)[1]: lv.canvas.itemcget(i, "fill") for i in lv.canvas.find_withtag("rowbg")}
+
+
+def test_sent_motor_icon_and_row_turn_red_for_one_second(shown_root):
+    """2.6.0: 속도 변경을 보내면 깜빡이지 않고 1초 동안 붉은 팬 그림 + 붉은 행 바탕, 그 뒤 원래대로."""
     import tkinter as tk
     from motor_monitor.ui import theme as T
     from motor_monitor.ui.widgets import MotorListView
@@ -379,28 +384,35 @@ def test_icon_blinks_red_twice_in_one_second(shown_root):
     lv._clock = lambda: now[0]
     m = Motor(5, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, rpm=800, sent_at=time.monotonic())
     other = Motor(6, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, rpm=800)
-    lv.set_rows([m, other])                                           # 속도를 보낸 모터: 깜빡임 시작
-    seen = []
-    for t in (0.0, 0.1, 0.3, 0.6, 0.8, 1.05):                       # 0~0.25 붉게, 0.25~0.5 원래, 0.5~0.75 붉게
+    lv.set_rows([m, other])                                           # 속도를 보낸 모터: 붉게 시작
+    for t in (0.0, 0.3, 0.6, 0.95):                                   # 1초 동안 계속 붉게 (깜빡임 없음)
         now[0] = 100.0 + t
         lv._redraw()
-        seen.append(tuple(lv.drawn_icons))
-    assert [s[0] for s in seen] == ["newmotor_red", "newmotor_red", "newmotor", "newmotor_red", "newmotor", "newmotor"]
-    assert all(s[1] == "newmotor" for s in seen)                     # 다른 모터는 그대로
-    lv.set_rows([m, other])                                           # 같은 송신은 다시 깜빡이지 않음
-    now[0] = 101.6
+        assert lv.drawn_icons == ["newmotor_red", "newmotor"]         # 다른 모터는 그대로
+        assert _row_fills(lv) == {"row0": T.LIST_SENT_BG}
+    now[0] = 101.05                                                   # 1초 뒤 원래대로
     lv._redraw()
+    assert lv.drawn_icons == ["newmotor", "newmotor"] and _row_fills(lv) == {}
+    lv.set_rows([m, other])                                           # 같은 송신은 다시 붉게 하지 않음
     assert lv.drawn_icons[0] == "newmotor"
     for name in ("oldmotor_red", "newmotor_red", "newmotor_limit_red", "oldmotor_ctrl_red"):
         assert lv.images.get(name, 20) is not None                  # 붉은 그림 파일
-    # 실제 시계로 1초 동안 저절로 깜빡였다가 원래대로 돌아옴
+    # 문제 행(음영)이어도 보낸 1초 동안은 붉은 행, 그 뒤 문제 음영으로 돌아옴
+    bad = Motor(8, MotorType.OLD_CTRL, True, status=MotorStatus.OK, had_err=True, sent_at=time.monotonic())
+    now[0] = 200.0
+    lv.set_rows([bad])
+    assert lv.drawn_icons == ["oldmotor_ctrl_red"] and _row_fills(lv) == {"row0": T.LIST_SENT_BG}
+    now[0] = 201.2
+    lv._redraw()
+    assert lv.drawn_icons == ["oldmotor_ctrl"] and _row_fills(lv) == {"row0": T.LIST_PROBLEM_BG}
+    # 실제 시계로 1초 동안 붉었다가 저절로 원래대로 돌아옴
     lv._clock = time.monotonic
     m2 = Motor(7, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, rpm=800, sent_at=time.monotonic())
     lv.set_rows([m2])
     shown_root.update()
-    assert lv.drawn_icons == ["newmotor_red"]
+    assert lv.drawn_icons == ["newmotor_red"] and _row_fills(lv) == {"row0": T.LIST_SENT_BG}
     end = time.time() + 1.5
     while time.time() < end:
         shown_root.update()
         time.sleep(0.02)
-    assert lv.drawn_icons == ["newmotor"] and lv._blink_job is None
+    assert lv.drawn_icons == ["newmotor"] and _row_fills(lv) == {} and lv._sent_job is None

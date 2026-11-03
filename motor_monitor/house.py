@@ -51,6 +51,16 @@ def motor_key(mtype: MotorType, mid: int, ip: str = "", port: int = C.MODBUS_POR
     return f"{int(mtype)}_{mid}"
 
 
+def speed_source(m: "Motor", zone_manual: Optional[bool]) -> str:
+    """속도 지정 방식 (화면의 수동/참조 표시): 'manual' / 'ref' / '' (기존모터, 구역 설정 모름).
+    신규모터는 구역설정의 RPM 제어 소스(수동 RPM / 기존모터 참조), 기존모터제어는 운전속도 방식(수동 지정 / 구역 참조)."""
+    if m.mtype == MotorType.NEW_MOTOR:
+        return "" if zone_manual is None else ("manual" if zone_manual else "ref")
+    if m.mtype == MotorType.OLD_CTRL:
+        return "ref" if m.ctrl_mode == CTRL_MODE_REF else "manual"
+    return ""
+
+
 @dataclass
 class Motor:
     id: int
@@ -80,7 +90,8 @@ class Motor:
     cmd_rpm: Optional[int] = None     # 지정값 (모터에 보낸/모터가 가진 값: 신규모터 0x16, 기존모터제어 h2)
     speed_note: str = ""              # 속도 문제 (기존모터제어: 모터 최고속도 h8 이 설정 속도보다 낮음). 있으면 이상 행
     max_rpm: int = 0                  # 기존모터제어: 모터 최고속도 h8 (1/min, 0 = 설정 없음/모름)
-    sent_at: Optional[float] = None   # 속도 변경을 보낸 시각 (화면에서 아이콘을 붉게 깜빡임)
+    sent_at: Optional[float] = None   # 속도 변경을 보낸 시각 (화면에서 1초 동안 팬 그림과 행을 붉게)
+    speed_src: str = ""               # 속도 지정 방식 (화면 표시용, get_list 가 채움): 'manual' 수동 / 'ref' 참조 / ''
 
     @property
     def has_problem(self) -> bool:
@@ -261,9 +272,14 @@ class HouseLine:
 
     # ------------------------------------------------------------ 모터 목록
     def get_list(self) -> List[Motor]:
-        """화면 표시 순서대로 모터 정보 사본 목록."""
+        """화면 표시 순서대로 모터 정보 사본 목록 (속도 지정 방식 speed_src 포함)."""
+        cfg = getattr(self.plant, "configs", {}).get(self.code)
+        zone_manual = None if cfg is None else cfg.source_manual
         with self._lock:
-            return [replace(self._motors[k]) for k in self._order if k in self._motors]
+            rows = [replace(self._motors[k]) for k in self._order if k in self._motors]
+        for m in rows:
+            m.speed_src = speed_source(m, zone_manual)
+        return rows
 
     def get_motor(self, dkey: str) -> Optional[Motor]:
         with self._lock:
