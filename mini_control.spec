@@ -7,7 +7,7 @@ a = Analysis(
     pathex=['.', 'tools'],
     binaries=[],
     datas=[],
-    hiddenimports=['motor_monitor.modbus', 'ecblue_tester'],
+    hiddenimports=['motor_monitor.modbus', 'ecblue_bus'],
     excludes=[],
     noarchive=False,
 )

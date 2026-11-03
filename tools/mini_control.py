@@ -27,10 +27,10 @@ from typing import Callable, Dict, List, Optional, Tuple
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from motor_monitor import modbus  # noqa: E402
 
-try:  # 같은 폴더의 시험기 통신부 재사용 (python tools/mini_control.py 실행 시)
-    import ecblue_tester as _bus_mod  # noqa: E402
+try:  # 같은 폴더의 ECblue 통신 공용부 (python tools/mini_control.py 실행 시)
+    import ecblue_bus as _bus_mod  # noqa: E402
 except ImportError:  # 패키지/exe 로 묶였을 때
-    from tools import ecblue_tester as _bus_mod  # type: ignore  # noqa: E402
+    from tools import ecblue_bus as _bus_mod  # type: ignore  # noqa: E402
 
 DEFAULT_IP = "172.27.0.116"
 PORT = 502

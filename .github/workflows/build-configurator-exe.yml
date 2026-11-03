@@ -1,15 +1,18 @@
-# 기존모터 시험기 Windows 실행파일 빌드 -> Actions 실행 결과의 Artifacts 에서 ECBLUE_TESTER 내려받기
-name: Build ECblue tester exe
+# ECblue configurator Windows 실행파일 빌드 -> Actions 실행 결과의 Artifacts 에서 ECBLUE_CONFIGURATOR 내려받기
+# (예전 기존모터 시험기 ECBLUE_TESTER 를 바꾼 프로그램. main 에 반영되면 Release 의 옛 ECBLUE_TESTER.exe 는 지움)
+name: Build ECblue configurator exe
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'tools/ecblue_tester.py'
+      - 'tools/ecblue_configurator.py'
+      - 'tools/motor_scanner.py'
       - 'motor_monitor/modbus.py'
-      - 'ecblue_tester.spec'
-      - '.github/workflows/build-tester-exe.yml'
+      - 'ecblue_configurator.spec'
+      - 'tests/test_configurator.py'
+      - '.github/workflows/build-configurator-exe.yml'
 
 # exe 를 Release 'exe-latest' 에 올리기 위한 권한 (update.bat 이 로그인 없이 여기서 내려받음)
 permissions:
@@ -26,13 +29,13 @@ jobs:
       - name: Install
         run: python -m pip install pyinstaller pytest
       - name: Test
-        run: python -m pytest -q tests/test_tester.py tests/test_core.py
+        run: python -m pytest -q tests/test_configurator.py tests/test_core.py
       - name: Build
-        run: python -m PyInstaller --noconfirm ecblue_tester.spec
+        run: python -m PyInstaller --noconfirm ecblue_configurator.spec
       - uses: actions/upload-artifact@v4
         with:
-          name: ECBLUE_TESTER
-          path: dist/ECBLUE_TESTER.exe
+          name: ECBLUE_CONFIGURATOR
+          path: dist/ECBLUE_CONFIGURATOR.exe
           retention-days: 30
       - name: Publish to release exe-latest (update.bat downloads from here)
         if: github.ref == 'refs/heads/main'
@@ -52,5 +55,8 @@ jobs:
               if ($LASTEXITCODE -ne 0) { exit 1 }
             }
           }
-          gh release upload exe-latest dist/ECBLUE_TESTER.exe --repo $repo --clobber
+          gh release upload exe-latest dist/ECBLUE_CONFIGURATOR.exe --repo $repo --clobber
           if ($LASTEXITCODE -ne 0) { exit 1 }
+          # 이름이 바뀐 옛 시험기 파일 정리 (없으면 그냥 넘어감)
+          gh release delete-asset exe-latest ECBLUE_TESTER.exe --repo $repo --yes 2>$null
+          exit 0

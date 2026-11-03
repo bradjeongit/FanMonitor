@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths:
       - 'tools/mini_control.py'
-      - 'tools/ecblue_tester.py'
+      - 'tools/ecblue_bus.py'
       - 'motor_monitor/modbus.py'
       - 'mini_control.spec'
       - '.github/workflows/build-mini-exe.yml'
