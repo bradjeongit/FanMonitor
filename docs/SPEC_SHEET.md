@@ -553,7 +553,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700,3@172.27.0.82:502=1=0=REF
 | `run.py` | 실행 시작점 | – |
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창). 항상 모니터링 모드로 시작(`create_plant`), `--monitoring` 은 효과 없음 | `Application`, `MainWindow_Loaded` |
 | `run_monitoring.bat` | 예전 모니터링 모드 실행 파일 (지금은 일반 실행과 같음) | – |
-| `tools/ecblue_configurator.py`, `ecblue_configurator.bat`, `ecblue_configurator.spec`, `build_configurator_exe.bat`, `.github/workflows/build-configurator-exe.yml`, `tests/test_configurator.py`, `tools/make_configurator_screenshots.py` | `SCR-CONFIG` ECblue configurator (3.6절) | – |
+| `tools/ecblue_configurator.py`, `ecblue_configurator.bat`, `ecblue_configurator.spec`, `build_configurator_exe.bat`, `.github/workflows/build-tester-exe.yml`, `tests/test_configurator.py`, `tools/make_configurator_screenshots.py` | `SCR-CONFIG` ECblue configurator (3.6절) | – |
 | `tools/ecblue_bus.py` | ECblue 통신 공용부(`Bus`, `mode_text`, `error_text`). 미니 제어기가 사용 (예전 시험기 `ecblue_tester.py` 의 통신부를 그대로 옮김) | – |
 | `tools/motor_tester.py`, `motor_tester.bat`, `motor_tester.spec`, `build_motor_tester_exe.bat`, `.github/workflows/build-motor-tester-exe.yml`, `tests/test_motor_tester.py` | 모터 시험기 SUNINUS MOTOR TEST (`MOTOR_TESTER.exe` 새 구현, 매뉴얼 14장). 운영 프로그램과 별개 | – |
 | `tools/motor_scanner.py`, `motor_scanner.bat`, `motor_scanner.spec`, `build_motor_scanner_exe.bat`, `.github/workflows/build-motor-scanner-exe.yml`, `tests/test_motor_scanner.py` | 모터 스캐너 (매뉴얼 15장). ID 스캔, ECblue 상태·설정, 통신 워치독(h17). 운영 프로그램과 별개 | – |

@@ -1,5 +1,6 @@
 # ECblue configurator Windows 실행파일 빌드 -> Actions 실행 결과의 Artifacts 에서 ECBLUE_CONFIGURATOR 내려받기
 # (예전 기존모터 시험기 ECBLUE_TESTER 를 바꾼 프로그램. main 에 반영되면 Release 의 옛 ECBLUE_TESTER.exe 는 지움)
+# 파일 이름(build-tester-exe.yml)은 실행 기록을 잇고 브랜치에서 수동 실행할 수 있도록 그대로 둠
 name: Build ECblue configurator exe
 
 on:
@@ -12,7 +13,7 @@ on:
       - 'motor_monitor/modbus.py'
       - 'ecblue_configurator.spec'
       - 'tests/test_configurator.py'
-      - '.github/workflows/build-configurator-exe.yml'
+      - '.github/workflows/build-tester-exe.yml'
 
 # exe 를 Release 'exe-latest' 에 올리기 위한 권한 (update.bat 이 로그인 없이 여기서 내려받음)
 permissions:
