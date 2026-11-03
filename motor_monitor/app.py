@@ -14,18 +14,23 @@ from .plant import Plant
 from .runtime import SingleInstance, setup_logging
 
 
+def create_plant(config_path, log_dir=None) -> Plant:
+    """프로그램은 항상 모니터링 모드(읽기만, 제어 신호 전송 안 함)로 시작. 제어는 화면의 전환 버튼으로."""
+    return Plant(config_path, monitoring=True, error_log_dir=log_dir)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="BLDC MOTOR MONITOR")
     ap.add_argument("--config", help="설정 파일 경로 (기본: 실행 폴더의 Config.dll)")
     ap.add_argument("--debug", action="store_true", help="통신 상세 로그 출력")
     ap.add_argument("--monitoring", action="store_true",
-                    help="모니터링 모드: 읽기만 하고 제어 신호는 보내지 않음 (운영 프로그램과 함께 시험할 때)")
+                    help="(예전 옵션, 효과 없음) 프로그램은 항상 모니터링 모드로 시작합니다")
     args = ap.parse_args(argv)
 
-    setup_logging(os.path.join(app_base_dir(), "logs"), logging.DEBUG if args.debug else logging.INFO)
+    log_dir = os.path.join(app_base_dir(), "logs")
+    setup_logging(log_dir, logging.DEBUG if args.debug else logging.INFO)
     log = logging.getLogger("motor_monitor")
-    log.info("BLDC MOTOR MONITOR v%s 시작 (%s)", __version__,
-             "모니터링 모드 - 제어 신호 전송 안 함" if args.monitoring else "제어 모드")
+    log.info("BLDC MOTOR MONITOR v%s 시작 (모니터링 모드 - 제어 신호 전송 안 함)", __version__)
 
     root = tk.Tk()
     root.withdraw()
@@ -37,7 +42,7 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        plant = Plant(args.config, monitoring=args.monitoring)
+        plant = create_plant(args.config, log_dir)
         try:
             plant.load()
         except ConfigError as e:

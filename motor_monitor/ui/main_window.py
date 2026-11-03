@@ -1,20 +1,23 @@
 """메인 화면 (SCR-MAIN). 기준: 운영 실행파일 MainWindow
 
-구성: 맨 위 모드 표시 띠(색상·문구 + 모드 전환 버튼) + 1~8구역을 가로 8열로 배치. 구역 패널마다
+구성: 맨 위 모드 표시 띠(색상·문구 + 설정 가져오기 / 에러 로그 / 모드 전환 버튼) + 1~8구역을 가로 8열로 배치.
+  프로그램은 항상 모니터링 모드로 시작(app.create_plant). 구역 패널마다
   제목줄(n구역) / 제어 시작·종료 버튼 / 머리 영역(통신상태 점, IP/PORT, RPM 소스, 설정·추가 버튼) / 모터 목록
 """
 from __future__ import annotations
 
 import logging
 import tkinter as tk
-from tkinter import messagebox
-from typing import Dict
+from tkinter import filedialog, messagebox
+from typing import Dict, Optional
 
 from .. import constants as C
 from ..helpers import get_house_name, zone_number
+from ..config import ConfigError, read_mini_items
 from ..plant import Plant
 from . import theme as T
 from .dialogs import LineSettingsDialog, MotorDialog
+from .tools import ConfigImportDialog, ErrorLogWindow, MiniImportDialog
 from .widgets import ControlButton, ImageButton, MotorListView, StatusDot, Tooltip
 
 log = logging.getLogger(__name__)
@@ -181,6 +184,24 @@ class MainWindow:
                                  bg=T.WHITE, fg=T.MODE_BUTTON_FG, activebackground=T.LIGHT_GRAY,
                                  relief="flat", bd=0, padx=10, pady=1, cursor="hand2")
         self.BtnMode.pack(side="right", padx=8, pady=3)
+        # 에러 로그 (SCR-ERRLOG): 확인하지 않은 새 에러가 있으면 빨간 바탕에 건수 표시
+        self.BtnErrors = tk.Button(self.mode_banner, text="에러 로그", command=self.open_error_log,
+                                   font=T.font(9, bold=True), bg=T.WHITE, fg=T.MODE_BUTTON_FG,
+                                   activebackground=T.LIGHT_GRAY, relief="flat", bd=0, padx=10, pady=1,
+                                   cursor="hand2")
+        self.BtnErrors.pack(side="right", padx=(8, 0), pady=3)
+        # 설정 가져오기: 운영 프로그램 Config.dll / 미니 제어기 mini_control.json
+        self.BtnImport = tk.Button(self.mode_banner, text="설정 가져오기 ▾", command=self.open_import_menu,
+                                   font=T.font(9, bold=True), bg=T.WHITE, fg=T.MODE_BUTTON_FG,
+                                   activebackground=T.LIGHT_GRAY, relief="flat", bd=0, padx=10, pady=1,
+                                   cursor="hand2")
+        self.BtnImport.pack(side="right", padx=(8, 0), pady=3)
+        self.import_menu = tk.Menu(root, tearoff=0)
+        self.import_menu.add_command(label="운영 프로그램 설정 (Config.dll / Config.ini)…",
+                                     command=self.import_config_file)
+        self.import_menu.add_command(label="미니 제어기 목록 (mini_control.json)…", command=self.import_mini_file)
+        self.error_window: Optional[ErrorLogWindow] = None
+        self._err_version = -1
 
         self.content = tk.Frame(root, bg=T.WHITE)
         self.content.pack(fill="both", expand=True, padx=2, pady=2)
@@ -212,9 +233,75 @@ class MainWindow:
     def _list_tick(self) -> None:
         try:
             self.refresh_lists(force=False)
+            self.update_error_button()
         except Exception:
             log.exception("목록 갱신 오류")
         self.root.after(LIST_REFRESH_MS, self._list_tick)
+
+    # ------------------------------------------------------------ 에러 로그
+    def update_error_button(self, force: bool = False) -> None:
+        el = self.plant.errors
+        if not force and el.version == self._err_version:
+            return
+        self._err_version = el.version
+        n = el.unseen
+        if n:
+            self.BtnErrors.configure(text=f"에러 로그 ({n})", bg=T.NET_ERR, fg=T.WHITE)
+        else:
+            self.BtnErrors.configure(text="에러 로그", bg=T.WHITE, fg=T.MODE_BUTTON_FG)
+
+    def open_error_log(self) -> None:
+        if self.error_window is not None and self.error_window.winfo_exists():
+            self.error_window.refresh_force()
+            self.error_window.lift()
+            return
+        self.error_window = ErrorLogWindow(self.root, self.plant,
+                                           on_seen=lambda: self.update_error_button(force=True))
+
+    # ------------------------------------------------------------ 설정 가져오기
+    def open_import_menu(self) -> None:
+        b = self.BtnImport
+        self.import_menu.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
+
+    def after_import(self) -> None:
+        self.update_header_box()
+        self.refresh_lists(force=True)
+        self.update_network_status()
+
+    def import_config_file(self, path: Optional[str] = None) -> None:
+        """운영 프로그램(BLDC_MOTOR_MONITOR) 설정 파일 가져오기 (DLG-IMPORT-CFG)."""
+        if self.plant.any_running:
+            messagebox.showwarning("설정 가져오기", "실행 중인 구역이 있습니다. 모든 구역을 종료한 뒤 가져오세요.",
+                                   parent=self.root)
+            return
+        path = path or filedialog.askopenfilename(
+            parent=self.root, title="운영 프로그램 설정 파일 선택",
+            filetypes=[("운영 프로그램 설정", "*.dll *.ini"), ("모든 파일", "*.*")])
+        if not path:
+            return
+        try:
+            imp = self.plant.read_config_import(path)
+        except (OSError, ConfigError) as e:
+            messagebox.showerror("설정 가져오기", f"설정 파일을 읽지 못했습니다.\n{e}", parent=self.root)
+            return
+        ConfigImportDialog(self.root, self.plant, imp, on_done=self.after_import).show_modal()
+
+    def import_mini_file(self, path: Optional[str] = None) -> None:
+        """미니 제어기(MINI_CONTROL) 항목 파일 가져오기 (DLG-IMPORT-MINI)."""
+        path = path or filedialog.askopenfilename(
+            parent=self.root, title="미니 제어기 항목 파일 선택 (mini_control.json)",
+            filetypes=[("미니 제어기 항목", "*.json"), ("모든 파일", "*.*")])
+        if not path:
+            return
+        try:
+            items = read_mini_items(path)
+        except ConfigError as e:
+            messagebox.showerror("설정 가져오기", f"파일을 읽지 못했습니다.\n{e}", parent=self.root)
+            return
+        if not items:
+            messagebox.showinfo("설정 가져오기", "가져올 항목이 없습니다.", parent=self.root)
+            return
+        MiniImportDialog(self.root, self.plant, items, path, on_done=self.after_import).show_modal()
 
     def refresh_lists(self, force: bool) -> None:
         for zp in self.zone_panels.values():
@@ -225,12 +312,13 @@ class MainWindow:
         """현재 모드에 맞게 띠 색상·문구, 전환 버튼, 창 제목, 구역 버튼 문구 갱신"""
         if self.plant.monitoring:
             bg = T.MONITOR_BANNER_BG
-            text = "모니터링 모드  |  모터 상태를 읽기만 하고, 제어 신호(수동·동작·RPM 설정)는 보내지 않습니다."
+            text = ("모니터링 모드  |  모터 상태를 읽기만 하고, 속도 변경 등 제어 신호는 보내지 않습니다."
+                    "  (프로그램은 항상 이 모드로 시작)")
             btn = "제어 모드로 전환"
             self.root.title(f"{C.APP_TITLE} [모니터링 모드 - 제어 신호 전송 안 함]")
         else:
             bg = T.CONTROL_BANNER_BG
-            text = "제어 모드  |  모터 상태를 읽고, 제어 신호(수동·동작·RPM 설정)를 보냅니다."
+            text = "제어 모드  |  모터 상태를 읽고, 제어 신호(수동·동작·RPM 설정, 기존모터제어 속도)를 보냅니다."
             btn = "모니터링 모드로 전환"
             self.root.title(C.APP_TITLE)
         self.mode_banner.configure(bg=bg)

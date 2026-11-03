@@ -14,9 +14,10 @@ HOUSE_LINES = ["H1R1", "H1R2", "H1R3", "H1R4", "H1R5", "H1R6", "H1R7", "H1R8"]
 # 수동 RPM / 속도제한 RPM 최대값
 MAX_RPM = 1100
 
-# 모터 ID 허용 범위 (모터 추가 창)
+# 모터 ID 허용 범위 (모터 추가 창) - 종류별
 MOTOR_ID_MIN = 1
-MOTOR_ID_MAX = 250
+MOTOR_ID_MAX = 249              # 기존모터
+NEW_MOTOR_ID_MAX = 30           # 신규모터
 
 # ---- 타이밍(초) ----
 STATUS_UPDATE_INTERVAL = 5      # 모터 상태 갱신 주기 (구역 제어 중일 때만)
@@ -52,8 +53,21 @@ class MotorStatus(IntEnum):
 MOTOR_TYPE_NAME = {MotorType.OLD_MOTOR: "기존모터", MotorType.NEW_MOTOR: "신규모터",
                    MotorType.OLD_CTRL: "기존모터제어"}
 
-# 기존모터제어(ECblue) 모터 ID(버스 주소) 범위 - ECblue 문서 h3: Bus Address 1~247
+# 기존모터제어 모터 ID 범위 (기존모터와 같음)
 CTRL_ID_MIN = 1
-CTRL_ID_MAX = 247
+CTRL_ID_MAX = 249
 # 제어모드(h4, 영구저장 NV - 쓰기 수명 1만 회) 설정 재시도 한도 (프로그램 실행 1회, 모터 1대당)
 CTRL_MODE_WRITE_MAX_TRIES = 3
+
+# 기존모터제어 속도 지정 방법
+CTRL_MODE_MANUAL = "manual"     # 수동 지정: 운전속도(set_rpm)로 계속 운전
+CTRL_MODE_REF = "ref"           # 참조모터: 지정한 IP/PORT/ID 기존모터의 실제 회전수를 따라감 (최대 MAX_RPM)
+
+
+def id_range(mtype: "MotorType") -> tuple:
+    """모터 종류별 ID 허용 범위 (최소, 최대)."""
+    if MotorType(mtype) == MotorType.NEW_MOTOR:
+        return MOTOR_ID_MIN, NEW_MOTOR_ID_MAX
+    if MotorType(mtype) == MotorType.OLD_CTRL:
+        return CTRL_ID_MIN, CTRL_ID_MAX
+    return MOTOR_ID_MIN, MOTOR_ID_MAX

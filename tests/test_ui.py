@@ -99,9 +99,10 @@ def test_motor_add_with_limit(ui, plant):
     assert msgs[-1] == ("오류", "모터 종류을 선택해 주세요.")
     d.motor_type_var.set(1); d._on_type()
     assert d.limit_row_visible                                    # 신규모터 선택 시 표시
-    d.txtID.insert(0, "251")
+    assert d.lbl_id_range.cget("text") == "정수(1~30)"           # 신규모터 ID 1~30
+    d.txtID.insert(0, "31")
     d.on_save()
-    assert msgs[-1] == ("오류", "모터ID값은 숫자로 1-250범위로 입력하셔야 합니다.")
+    assert msgs[-1] == ("오류", "모터ID값은 숫자로 1-30범위로 입력하셔야 합니다.")
     d.txtID.delete(0, "end"); d.txtID.insert(0, "13")
     d.cbUSELIMIT.current(0)
     d.txtLIMITRPM.delete(0, "end"); d.txtLIMITRPM.insert(0, "2000")
@@ -168,12 +169,16 @@ def test_zone_start_stop_and_status_icons(ui, plant, monkeypatch):
     h.add_motor(1, MotorType.NEW_MOTOR, True, True, 400)
     m = h.get_motor("1_1")
     assert MotorListView.type_icon(m) == ("newmotor_limit", "신규모터(제한모드)")
-    m.status, m.had_err = MotorStatus.OK, True
-    assert MotorListView.status_icon(m) == ("bad_haderr", "정상(이상기록있음)")
-    m.status = MotorStatus.ERR
-    assert MotorListView.status_icon(m) == ("bad_new", "이상")
-    m.status = MotorStatus.READY
+    m.status, m.had_err, m.err_note = MotorStatus.OK, True, "192.168.0.4:502 접속 실패"
+    assert MotorListView.status_icon(m) == ("bad_haderr", "통신 이상\n192.168.0.4:502 접속 실패")
+    m.status = MotorStatus.READY                                  # 한 번도 응답하지 않은 채 이상
+    assert MotorListView.status_icon(m)[0] == "bad_haderr"
+    m.had_err, m.err_note = False, ""
     assert MotorListView.status_icon(m) == (None, "")
+    m.status = MotorStatus.OK                                     # 다시 응답 -> 정상 그림
+    assert MotorListView.status_icon(m) == ("good", "정상")
+    m.status = MotorStatus.ERR
+    assert MotorListView.status_icon(m) == ("bad_new", "이상 (오래 응답 없음)")
 
 
 def test_monitoring_mode_screen(root, tmp_path, monkeypatch):
@@ -202,10 +207,10 @@ def test_ctrl_motor_add_and_modify(ui, plant):
     d.motor_type_var.set(2); d._on_type()
     assert d.ctrl_rows_visible and not d.limit_row_visible
     assert d.txtCIP.get() == "172.27.0.84" and d.txtCPORT.get() == "502"     # 기존모터 게이트웨이 기본값
-    assert d.lbl_id_range.cget("text") == "정수(1~247)"
-    d.txtID.insert(0, "248")
+    assert d.lbl_id_range.cget("text") == "정수(1~249)"
+    d.txtID.insert(0, "250")
     d.on_save()
-    assert msgs[-1] == ("오류", "모터ID값은 숫자로 1-247범위로 입력하셔야 합니다.")
+    assert msgs[-1] == ("오류", "모터ID값은 숫자로 1-249범위로 입력하셔야 합니다.")
     d.txtID.delete(0, "end"); d.txtID.insert(0, "66")
     d.on_save()
     assert msgs[-1] == ("오류", "운전속도를 숫자 0~1100범위로 입력해주세요.")       # 운전속도는 꼭 입력

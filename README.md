@@ -13,8 +13,8 @@
 ```
 python run.py              # Python 3.9+ (표준 라이브러리만 사용)
 python run.py --debug      # 통신 패킷 로그 포함
-python run.py --monitoring # 모니터링 모드로 시작: 읽기만, 제어 신호 전송 안 함 (run_monitoring.bat)
-                           # 실행 중에는 화면 맨 위 띠의 [모니터링 모드로 전환]/[제어 모드로 전환] 버튼으로 변경
+                           # 항상 모니터링 모드(읽기만, 제어 신호 전송 안 함)로 시작.
+                           # 제어하려면 화면 맨 위 띠의 [제어 모드로 전환] 버튼. 에러 로그·설정 가져오기 버튼도 띠에 있음
 ecblue_tester.bat          # 기존모터 시험기 (172.27.0.95, ID 180·176 고정) - 매뉴얼 12장
 mini_control.bat           # 미니 제어기: IP·ID 로 팬 추가, 속도 % 또는 참조팬 지정 - 매뉴얼 13장
 motor_tester.bat           # 모터 시험기(SUNINUS MOTOR TEST, MOTOR_TESTER.exe 새 구현) - 매뉴얼 14장

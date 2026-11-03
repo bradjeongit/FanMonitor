@@ -174,20 +174,26 @@ def test_status_had_err_and_timeout(tmp_path):
     h._handle_src_frame(bytes([0, 0, 0, 0, 0, 5, 5, 4, 2, 0x03, 0xB6]))
     m = h.get_motor(key)
     assert m.status == MotorStatus.OK and m.rpm == 950 and not m.had_err
-    # 명령 전송 후 60초 무응답 -> 이상기록(빨간 !), 상태는 정상 유지
+    # 명령 전송 후 60초 무응답 -> 이상표시(빨간 !), 상태는 정상 유지, 에러 로그 1건
     with h._lock:
         h._motors[key].check_since = now[0]
     now[0] += 60
     h.update_status()
     m = h.get_motor(key)
-    assert m.had_err and m.status == MotorStatus.OK and m.check_since is None
-    # 응답이 다시 와도 이상기록은 유지 (제어 재시작 시 해제)
+    assert m.had_err and m.status == MotorStatus.OK and m.check_since is None and "60초" in m.err_note
+    h.update_status()                                    # 같은 문제는 다시 기록하지 않음
+    errs = plant.errors.recent()
+    assert [e.level for e in errs] == ["에러"] and errs[0].target == "기존모터 ID 5" and errs[0].zone == "1구역"
+    # 응답이 다시 오면 바로 정상 표시로 돌아오고 '복구' 기록
     h._handle_src_frame(bytes([0, 0, 0, 0, 0, 5, 5, 4, 2, 0x03, 0xB6]))
-    assert h.get_motor(key).had_err
-    # 마지막 응답 후 1시간 -> 이상
+    m = h.get_motor(key)
+    assert not m.had_err and m.err_note == ""
+    assert plant.errors.recent()[0].level == "복구"
+    # 마지막 응답 후 1시간 -> 이상 (에러 기록)
     now[0] += 3600
     h.update_status()
     assert h.get_motor(key).status == MotorStatus.ERR
+    assert "60분" in plant.errors.recent()[0].message
     h.mod_motor(key, False)
     m = h.get_motor(key)
     assert m.status == MotorStatus.NOTUSE and m.must_send_zero and m.rdate is None

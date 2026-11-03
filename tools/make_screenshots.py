@@ -64,11 +64,18 @@ for code, (olds, news) in ZONES.items():
         source_ip=og.host, source_port=og.port, target_ip=ng.host, target_port=ng.port,
         source_manual=False, source_line=line, source_id=sid)
 plant.houses["H1R8"].add_motor(9, MotorType.NEW_MOTOR, False)     # 중지 예시
-# 기존모터제어 예시: 1구역 기존모터 게이트웨이의 ECblue 10번을 700 RPM 으로 지정
+# 기존모터제어 예시: 1구역 ECblue 10번은 700 RPM 수동 지정, 2구역 ECblue 12번은 참조모터(2구역 기존모터 66) 따라감
 old_gw["H1R1"].add_ecblue(10, analog_rpm=0)
 plant.houses["H1R1"].add_motor(10, MotorType.OLD_CTRL, True, ip=old_gw["H1R1"].host,
                                port=old_gw["H1R1"].port, set_rpm=700)
+old_gw["H1R2"].add_ecblue(12, analog_rpm=0)
+plant.houses["H1R2"].add_motor(12, MotorType.OLD_CTRL, True, ip=old_gw["H1R2"].host, port=old_gw["H1R2"].port,
+                               ctrl_mode=C.CTRL_MODE_REF, ref_ip=old_gw["H1R2"].host, ref_port=old_gw["H1R2"].port,
+                               ref_id=66)
 plant.save()
+# 에러 로그 예시 (지난 기록)
+plant.errors.error("6구역", "신규모터 통신장치", "192.168.0.12:502 접속 실패 (10초마다 재시도)")
+plant.errors.recover("6구역", "신규모터 통신장치", "192.168.0.12:502 다시 접속됨")
 
 W, H = (int(v) for v in os.environ.get("SHOT_SIZE", "1920x1040").split("x"))
 root = tk.Tk()
@@ -109,14 +116,15 @@ def start():
 
 
 def demo_states():
-    # 상태 예시: 이상기록(빨간 !), 이상
+    # 상태 예시: 이상표시(빨간 !, 응답이 멈춘 모터), 이상. 응답이 다시 오면 정상으로 돌아가므로 시뮬레이터에서 뺌
     plant.update_all_status()
     for code, mid, had_err, status in [("H1R4", 9, True, None), ("H1R6", 5, True, None), ("H1R7", 2, None, MotorStatus.ERR)]:
+        new_gw[code].new_regs.pop(mid, None)
         h = plant.houses[code]
         with h._lock:
             m = h._motors[f"1_{mid}"]
             if had_err:
-                m.had_err = True
+                h._set_err(m, "명령 후 60초 동안 응답 없음")
             if status is not None:
                 m.status = status
             h._touch()
@@ -132,7 +140,8 @@ def main_shot():
     zp = win.zone_panels["H1R1"]
     items = [("1", zp.StopBtn), ("2", zp), ("3", zp.rec_SOURCE_NETSTATUS.master),
              ("4", zp.rec_TARGET_NETSTATUS.master), ("5", zp.rec_SID_NETSTATUS.master),
-             ("6", zp.Btn_Settings), ("7", zp.Btn_Add), ("8", zp.LV.header), ("9", zp.LV.canvas), ("10", win.BtnMode)]
+             ("6", zp.Btn_Settings), ("7", zp.Btn_Add), ("8", zp.LV.header), ("9", zp.LV.canvas), ("10", win.BtnMode),
+             ("11", win.BtnErrors), ("12", win.BtnImport)]
     MARKS["main_running"] = [(n, bbox(w)) for n, w in items]
     root.after(100, line_dialog)
 
@@ -191,7 +200,8 @@ def motor_add_ctrl():
         ox, oy = d.winfo_rootx(), d.winfo_rooty()
         MARKS["dlg_motor_add_ctrl"] = [(n, bbox(w, ox, oy)) for n, w in [
             ("15", d.rb_ctrlmotor), ("16", d.txtCIP.master), ("17", d.txtCPORT.master),
-            ("18", d.txtSETRPM.master)]]
+            ("18", d.rb_ctrl_manual), ("19", d.txtSETRPM.master), ("20", d.rb_ctrl_ref),
+            ("21", d.txtRIP.master), ("22", d.txtRPORT.master), ("23", d.txtRID.master), ("24", d.BtnRefZone)]]
         d.destroy()
         root.after(100, motor_mod)
     root.after(500, m)
@@ -206,6 +216,32 @@ def motor_mod():
         ox, oy = d.winfo_rootx(), d.winfo_rooty()
         MARKS["dlg_motor_mod"] = [(n, bbox(w, ox, oy)) for n, w in [
             ("12", d.mod_type_line), ("13", d.lblID), ("14", d.BtnDelete)]]
+        d.destroy()
+        root.after(100, error_log)
+    root.after(500, m)
+    d.show_modal()
+
+
+def error_log():
+    win.open_error_log()
+    w = win.error_window
+    w.geometry("920x330+40+40")
+
+    def m():
+        crop_dialog("error_log", w)
+        w.destroy()
+        root.after(100, import_dialog)
+    root.after(600, m)
+
+
+def import_dialog():
+    from motor_monitor.config import MiniItem
+    from motor_monitor.ui.tools import MiniImportDialog
+    items = [MiniItem("172.27.0.116", 3, "pct", 50, "", 0), MiniItem("172.27.0.116", 4, "ref", 0, "172.27.0.95", 180)]
+    d = MiniImportDialog(root, plant, items, r"C:\MINI_CONTROL\mini_control.json")
+
+    def m():
+        crop_dialog("dlg_import_mini", d)
         d.destroy()
         root.after(100, finish)
     root.after(500, m)
