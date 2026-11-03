@@ -3,6 +3,7 @@
 3 문제 상태 행 음영, 4 설정 속도 1% 이내는 오차로 인정, 5 느리면 조금씩 올리고 반응이 없으면 더 보내지 않음,
 6 오차 안에 든 지정값을 기억해 다음 실행의 최초 신호로, 7 팬 속도는 30초에 한 번 점검 (설정을 바꾸면 바로)."""
 import json
+import sys
 import time
 from types import SimpleNamespace
 
@@ -346,8 +347,12 @@ def shown_root():
     r.destroy()
 
 
-@pytest.mark.parametrize("key,expected", [("y", True), ("Y", True), ("space", True), ("Return", True),
-                                          ("KP_Enter", True), ("n", False), ("Escape", False)])
+@pytest.mark.parametrize("key,expected", [
+    ("y", True), ("Y", True), ("space", True), ("Return", True),
+    # 숫자패드 Enter: Windows 의 Tk 는 Return 으로 전달하므로(위 Return 으로 확인) X11 에서만 따로 확인
+    pytest.param("KP_Enter", True, marks=pytest.mark.skipif(sys.platform.startswith("win"),
+                                                            reason="Windows 는 숫자패드 Enter 도 Return")),
+    ("n", False), ("Escape", False)])
 def test_yes_no_keys(shown_root, key, expected):
     from motor_monitor.ui import dialogs, msgbox
     seen = {}
