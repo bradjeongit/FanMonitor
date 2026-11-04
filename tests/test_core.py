@@ -265,7 +265,8 @@ def test_control_loop(tmp_path, fast):
 
         plant.start_line(code)
         assert _wait(lambda: h.get_motor("0_126").rpm == 770)
-        assert h.source_net_status and h.target_net_status
+        # 기존모터·신규모터 통신장치는 서로 다른 쓰레드가 따로 접속하므로 둘 다 될 때까지 기다림 (느린 PC)
+        assert _wait(lambda: h.source_net_status and h.target_net_status)
         assert _wait(lambda: gw_new.new_regs[1][modbus.NEW_REG_RPM] == 770)
         assert _wait(lambda: gw_new.new_regs[4][modbus.NEW_REG_RPM] == 400)
         assert gw_new.new_regs[1][modbus.NEW_REG_AUTOMANUAL] == 1 and gw_new.new_regs[1][modbus.NEW_REG_STARTSTOP] == 1
