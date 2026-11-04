@@ -13,6 +13,7 @@ mini_control_settings.json
 log/
 Motor_Config.ini
 motor_scanner.json
+ecblue_configurator.json
 /*.exe
 *.exe.download
 speed_memory.json

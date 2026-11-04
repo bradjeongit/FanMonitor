@@ -22,7 +22,7 @@
 |---|---|---|
 | `SCR-` | 화면(메인 창) | `SCR-MAIN` |
 | `MAIN-` | 메인 화면 공통 요소 | `MAIN-MODE-BANNER` |
-| `TST-` | 기존모터 시험기(`SCR-TESTER`) 구성요소 (모터별은 `TST-{ID}-`, 공통은 `TST-*-`) | `TST-*-BTN-CONN` |
+| `CFG-` | ECblue configurator(`SCR-CONFIG`) 구성요소 (예전 기존모터 시험기의 `TST-` 대체) | `CFG-BTN-CONN` |
 | `DLG-` | 대화상자(팝업 창) | `DLG-LINE`, `DLG-MOTOR` |
 | `ZONE-` | 구역 패널 (n = 1~8) | `ZONE-3` (3구역) |
 | `MSG-` | 메시지(확인/오류 알림) 문구. 프로그램 창 안에 뜨는 메시지 창 `DLG-MSG` 로 표시 | `MSG-LINE-02` |
@@ -47,7 +47,7 @@
 | ID | 이름 | 여는 방법 | 크기 | 코드 (파일 / 클래스) | 운영 프로그램 |
 |---|---|---|---|---|---|
 | `SCR-MAIN` | 메인 화면 (1~8구역 가로 배치). 실행 모드: **모니터링 모드**(항상 이 모드로 시작, 4.4절) / **제어 모드** | 프로그램 실행 | Windows: 최대화로 시작 / 그 외 1600×900, 최소 1500×450 | `motor_monitor/ui/main_window.py` / `MainWindow` | `MainWindow` |
-| `SCR-TESTER` | 기존모터 시험기 (별도 프로그램, 3.6절) | `ECBLUE_TESTER.exe` / `ecblue_tester.bat` / `python tools/ecblue_tester.py` | 620×520, 최소 460×470 | `tools/ecblue_tester.py` / `TesterApp`, `MotorPanel` | – (신규) |
+| `SCR-CONFIG` | ECblue configurator (별도 프로그램, 3.6절. 예전 `SCR-TESTER` 기존모터 시험기 대체) | `ECBLUE_CONFIGURATOR.exe` / `ecblue_configurator.bat` / `python tools/ecblue_configurator.py` | 1120×720, 최소 900×600 | `tools/ecblue_configurator.py` / `ConfiguratorApp` | – (신규) |
 | `DLG-LINE` | 구역설정 창 | `ZONE-*-BTN-SET` 클릭 | 400×300 고정, 모달 | `motor_monitor/ui/dialogs.py` / `LineSettingsDialog` | `wHOUSE` |
 | `DLG-MOTOR` (ADD) | 모터 추가 창 | `ZONE-*-BTN-ADD` 클릭 | 560×340, 기존모터제어 선택 시 560×460, 모달 (운영 프로그램 400×300 보다 큼) | `dialogs.py` / `MotorDialog(mode="ADD")` | `wMotor` |
 | `DLG-MOTOR` (MOD) | 모터 수정/삭제 창 | `ZONE-*-LIST` 항목 더블클릭 | 위와 같음, 모달 | `dialogs.py` / `MotorDialog(mode="MOD")` | `wMotor` |
@@ -256,39 +256,43 @@
 
 > 문구(맞춤법 포함)는 운영 프로그램 그대로입니다. 메시지는 모두 `DLG-MSG`(프로그램 창 안)로 보여 줍니다. 단, 메인 창이 생기기 전의 `MSG-MAIN-01`·`06` 은 OS 메시지 상자입니다.
 
-### 3.6 `SCR-TESTER` 기존모터 시험기
+### 3.6 `SCR-CONFIG` ECblue configurator
 
-기존(ECblue) 모터 2대를 직접 시험하고 결과를 로그로 남기는 별도 프로그램입니다. 운영 프로그램·`Config.dll` 과 무관하게 동작합니다.
-대상은 코드에 고정되어 화면에서 바꿀 수 없습니다: `HOST = "172.27.0.95"`, `PORT = 502`, `MOTOR_IDS = (180, 176)` (`tools/ecblue_tester.py` 맨 위).
+ECblue 팬 1대를 골라 레지스터 값과 의미를 보고, 속도 그래프와 속도 지정·통신 끊김 시 자동 운전을 설정하는 별도 프로그램입니다(예전 `SCR-TESTER` 기존모터 시험기를 대체, 2026-11-03). 운영 프로그램·`Config.dll` 과 무관하게 동작합니다.
+레지스터 정의(`INPUT_ROWS`, `EDIT_PARAMS`, `VIEW_PARAMS`, `WD_MODES`, `wd_*`)와 통신(`Client`, `Worker`, `read_regs`, `read_all`, `write_regs`, `watchdog_changes`)은 모터 스캐너(`tools/motor_scanner.py`)의 것을 그대로 씁니다.
 
-![기존모터 시험기 구성요소 번호](images/tester_annotated.png)
+![ECblue configurator 구성요소 번호](images/configurator_annotated.png)
 
 | 번호 | ID | 이름 | 종류 | 코드 객체 | 동작 |
 |---|---|---|---|---|---|
-| – | `TST-{ID}` | 모터 패널 (왼쪽 180, 오른쪽 176) | 묶음 | `MotorPanel` | 모터 1대의 상태와 버튼 |
-| 12 | `TST-*-DOT` / `TST-*-LBL-STATE` | 응답 상태 점 / 문구 | 점 / 글자 | `dot` / `lbl_state` | 초록 = 응답 정상, 빨강 = 응답 없음, 회색 = 시험 전. 마지막 응답 시각 |
-| 8 | `TST-*-LBL-RPM` | 실제 회전수 | 큰 글자 | `lbl_rpm` | i14 (RPM) |
-| 9 | `TST-*-LBL-INFO` | 상세 상태 | 글자 3줄 | `info` | 운전 h1(Enable), 지정 h2, 전류 i15(A), 제어모드 h4, 오류 i12(비트 이름) |
-| 1 | `TST-*-BTN-CONN` | 접속 테스트 | 버튼 | `btn_conn` | TCP 새로 접속 → h1~h4·i14(+i15)·i12 읽기 → 결과 로그. 쓰기 없음. 처음 성공한 h1/h2/h4 를 '원래 설정' 으로 기억 |
-| 2 | `TST-*-BTN-SPEED` | 현재 속도 | 버튼 | `btn_speed` | i14 만 1회 읽기 (운영 기존모터 읽기와 같은 요청). 쓰기 없음 |
-| 3 | `TST-*-BTN-MON` | 모니터링 시작/중지 | 버튼 | `btn_mon` | 2초(`MONITOR_INTERVAL_MS`)마다 전체 읽기, 화면 갱신, CSV 기록. 응답 끊김/회복을 로그 |
-| 4 | `TST-*-TXT-RPM` | 속도 입력 | 숫자칸 | `ent_rpm` | 0~1100, 50 단위 화살표 |
-| 5 | `TST-*-BTN-SET` | 지정 | 버튼 | `btn_set` | 확인 `TST-MSG-SET` → 제어모드가 아니면 경고 확인 `TST-MSG-MODE` 후 PIN(h0=10) → h4 → h1 Enable → h2 쓰기 → 다시 읽어 확인. 성공하면 지정 속도로 기억하고 모니터링 자동 시작 |
-| 6 | `TST-*-BTN-STOP` | 정지(0) | 버튼 | `btn_stop` | 확인 후 h2 = 0 (지정 속도 0 으로 유지) |
-| 7 | `TST-*-BTN-RESTORE` | 원래대로 | 버튼 | `btn_restore` | 확인 후 기억한 h2 → h1 → PIN → h4 순서로 복원 → 다시 읽어 확인. 지정 속도 해제 |
-| – | `TST-*-CHK-KEEP` | 모니터링 중 지정 속도 유지 | 체크 | `keep` | 기본 켜짐. 모니터링에서 h2 가 지정 속도와 다르면(정전 후 재시작 등) h2 다시 쓰기 |
-| – | `TST-*-LBL-TARGET` | 지정 속도 | 글자 | `lbl_target` | 없음 / n RPM / 0 RPM(정지) |
-| 10 | `TST-BTN-MONALL` | 모두 모니터링 | 버튼 | `TesterApp.btn_all` | 두 모터 모니터링을 함께 시작/중지 |
-| 11 | `TST-LOG` | 로그 창 | 글자 목록 | `TesterApp.txt` | 모든 동작·결과. 경고 주황, 오류 빨강 |
+| 1 | `CFG-CB-IP` | IP | 콤보(입력 가능) | `cb_ip` | 최근 10개(`ecblue_configurator.json`). 처음 기본 172.27.0.95. Enter = 연결 |
+| 2 | `CFG-CB-ID` | ID | 콤보(입력 가능) | `cb_id` | 1~247, 최근 10개. 처음 기본 180 |
+| 3 | `CFG-BTN-CONN` | 연결 | 버튼 | `btn_conn` | 형식 검사 → 다른 장치로 바꾸는데 기록이 있으면 `CFG-MSG-SWITCH` → 접속, i1 제품코드로 종류 판별(`classify`) → 전체 레지스터 읽기(`read_all`) → 표·자동 운전 상태·입력칸 채움 → ECblue 면 속도 기록 시작. **한 번에 1대** |
+| 4 | `CFG-BTN-DISC` | 연결 끊기 | 버튼 | `btn_disc` | 확인을 멈추고 연결을 닫음. 기록은 남김 |
+| 5 | `CFG-DOT` / `CFG-LBL-STATUS` | 상태 | 점 / 글자 | `dot` / `lbl_status` | 초록 응답 정상, 빨강 응답 없음, 주황 연결 중, 회색 연결 안 됨. `IP ID n · 제품 · 펌웨어 · 응답 상태 (시각)` |
+| 6 | `CFG-BTN-READ` | 새로 읽기 | 버튼 | `btn_read` | 전체 레지스터 다시 읽기 |
+| 7 | `CFG-TREE-REG` | 레지스터 표 | 표 | `tree` | 상태 i0, i1, i14, i15, i33, i27, i26, i20~i24, i10, i12, i13, i49 / 설정 h1~h18, h25, h30 (`HOLD_ROWS`). 열: 주소 · 이름 · 값 · 의미(`INPUT_ROWS` 표시 함수, `hold_meaning`, h1 비트 `h1_text`, h17 `wd_text`). 노란 줄 = `WRITABLE`(h1, h2, h4, h5, h17), 회색 = 읽지 못함, 빨강 = i12 오류 있음 |
+| 8 | `CFG-LBL-DETAIL` | 고른 줄의 의미 | 글자 | `lbl_detail` | 표에서 고른 줄의 전체 의미 |
+| 9 | `CFG-RB-RANGE` | 보기 | 토글 버튼 5개 | `range_buttons` | 10분 / **1시간(기본)** / 6시간 / 12시간 / 24시간 (`RANGES`) |
+| 10 | `CFG-BTN-FAST` | 10초 단위 체크 | 토글 버튼 | `btn_fast` | **10분 보기에서만** 누를 수 있음. 켜면 확인 주기 10초(`FAST_CHECK_SEC`). 다른 보기로 바꾸면 꺼지고 30초 |
+| 11 | `CFG-LBL-CHECK` | 확인 주기·기록 | 글자 | `lbl_check` | `30초마다 확인 · 기록 n개 (기간) · 최대 24시간, 닫으면 지워짐` |
+| 12 | `CFG-GRAPH` | 속도 그래프 | 캔버스 | `canvas` | 실제 속도 i14(파랑 실선, 기록 120개 이하면 점도) · 지정 속도 h2(주황 점선 계단선). 오른쪽 끝 = 지금, 5초(`REDRAW_MS`)마다 다시 그림. 응답 없음·75초(`GAP_SEC`) 넘는 간격에서 선을 끊음. 세로 눈금 50~10000 RPM 단위 중 6칸 이하, 가로 눈금 `TICK_SEC`(2분·10분·1·2·4시간, 이 PC 시간대). 마우스를 올리면 가장 가까운 기록의 시각·실제·지정 |
+| 13 | `CFG-LBL-NOW` | 현재 값 | 글자 | `lbl_now` | 마지막 기록의 실제·지정 속도, 시각, h8 |
+| 14 | `CFG-TXT-RPM` / `CFG-BTN-SET` / `-STOP` / `-RESTORE` | 속도 지정 | 숫자칸·버튼 | `ent_rpm`, `btn_set`, `btn_stop`, `btn_restore` | 지정: 0~1100, `CFG-MSG-SET`(h8 보다 크면 제한 안내) → h4 가 통신 속도가 아니면 `CFG-MSG-MODE` 후 PIN(h0=10) → h4 → h1 Enable → h2 쓰기 → 다시 읽어 확인. 정지: h2 = 0. 원래대로: 처음 연결 때 읽은 h1/h2/h4 로 (h2 → h1 → PIN → h4) |
+| 15 | `CFG-CHK-KEEP` / `CFG-LBL-TARGET` | 지정 속도 유지 / 지정 속도 | 체크 / 글자 | `keep_var` / `lbl_target` | 기본 켜짐. 확인 때 h2 가 이 프로그램의 지정 속도와 다르고 제어 모드가 통신 속도면 h2 다시 쓰기 |
+| 16 | `CFG-LBL-WD` | 자동 운전 지금 상태 | 글자 | `lbl_wd` | `wd_summary(h17, h5)`: 켜짐(초록, 시작 시간·속도) / 꺼짐(회색, 저장된 h5) / 읽지 못함(빨강) |
+| 17 | `CFG-TXT-WD-SEC` / `-WD-RPM` / `CFG-CB-WD-MODE` / `CFG-BTN-WD-SET` / `-WD-OFF` | 자동 운전 설정 | 숫자칸·콤보·버튼 | `ent_wd_sec`, `ent_wd_rpm`, `cb_wd_mode`, `btn_wd_set`, `btn_wd_off` | 시작 시간 1~255초(기본 60, 연결 때 장치 값), 속도 0~1100(기본 770, h8 이하), 동작 2 정속 운전 / 3 경보 + 정속 운전. 설정: `watchdog_changes`(h5 는 바뀔 때만) → `write_regs`(PIN 해제, 쓴 뒤 확인). 45초(`WD_RECOMMENDED_SEC`) 미만이면 `CFG-MSG-WD` 에 경고. 끄기: h17 = 0. h17·h5 를 읽지 못하면 막힘 |
+| 18 | `CFG-LOG` | 로그 | 글자 목록 | `txt` | 모든 동작·결과. 주의 주황, 오류 빨강 (최근 2000줄) |
 
-- 메시지: `TST-MSG-SET` "모터 ID n 를 r RPM 으로 운전합니다. 계속할까요?" / `TST-MSG-MODE` (경고) 제어모드(h4) 변경 안내 / `TST-MSG-STOP` / `TST-MSG-RESTORE` / `TST-MSG-EXIT` "시험기를 종료할까요? 모터는 마지막으로 지정한 상태로 계속 운전합니다."
-- 통신: 연결 1개를 작업 쓰레드 하나가 순서대로 사용(요청 간격 0.1초, 응답 대기 2초). 끊기면 다음 요청 때 다시 접속.
-- h4(영구저장) 쓰기는 실행 1회당 모터별 3번까지만 시도(`MODE_WRITE_MAX_TRIES`).
-- i15(전류)를 지원하지 않는 펌웨어면 i14 만 읽습니다. i12 를 읽지 못하면 '-' 로 표시합니다.
-- 실행파일: `ecblue_tester.spec` → `dist/ECBLUE_TESTER.exe` (파일 하나, 콘솔 없음). Windows 에서 `build_tester_exe.bat`, 또는 GitHub Actions `Build ECblue tester exe` (main 반영 시 자동, 수동 실행 가능) 의 Artifacts. 시작 오류는 `logs/ecblue_tester_error.txt`.
-- 로그 폴더: exe 는 exe 옆 `logs`, 파이썬 실행은 프로그램 폴더 `logs`.
-- 로그: `logs/ecblue_tester_YYYYMMDD.log` (모든 동작), `logs/ecblue_monitor_YYYYMMDD.csv` (시각, ID, 응답, 실제RPM, 전류A, h1, h2, h4, 오류i12, 유지목표RPM).
+- 메시지: `CFG-MSG-SWITCH` "다른 장치(…)로 바꾸면 지금 장치(…)의 속도 기록 n개가 지워집니다. 계속할까요?" / `CFG-MSG-SET` / `CFG-MSG-MODE`(경고) / `CFG-MSG-STOP` / `CFG-MSG-RESTORE` / `CFG-MSG-WD` / `CFG-MSG-WD-OFF` / `CFG-MSG-EXIT` "프로그램을 닫을까요? 모터는 마지막으로 지정한 상태로 계속 운전합니다. 속도 기록 n개는 지워집니다."
+- 속도 기록: `history` (시각, i14, h2), **메모리에만**. 24시간(`KEEP_SEC`)보다 오래된 기록은 지움. 닫기(`shutdown`)·다른 장치 연결 때 모두 지움. 파일로 남기지 않음(예전 시험기의 `ecblue_monitor_*.csv` 없음).
+- 확인(`job_sample`): i12~i15 를 한 번에, h1~h4 를 한 번에 읽음. 주기 `CHECK_SEC` 30초 / `FAST_CHECK_SEC` 10초. 응답 끊김·복구는 바뀔 때만 로그.
+- 통신: 작업 쓰레드 1개(`motor_scanner.Worker`)가 차례로 처리, 응답 대기 1초(`TIMEOUT`). ECblue 가 아닌 제품코드면 값만 보여 주고 확인·쓰기는 하지 않음.
+- h4(영구저장) 쓰기는 실행 1회당 3번까지만 시도(`MODE_WRITE_MAX_TRIES`).
+- 실행파일: `ecblue_configurator.spec` → `dist/ECBLUE_CONFIGURATOR.exe` (파일 하나, 콘솔 없음, `motor_scanner` 함께 묶음). Windows 에서 `build_configurator_exe.bat`, 또는 GitHub Actions `Build ECblue configurator exe`(main 반영 시 자동, 수동 실행 가능). main 에 반영되면 Release 의 옛 `ECBLUE_TESTER.exe` 는 지우고, `update.bat` 은 폴더의 옛 `ECBLUE_TESTER.exe` 를 지움. 시작 오류는 `logs/ecblue_configurator_error.txt`.
+- 파일: 로그 `logs/ecblue_configurator_YYYYMMDD.log`(exe 옆 / 프로그램 폴더), 최근 IP·ID `ecblue_configurator.json`.
 - 종료(X): 모터 설정은 바꾸지 않습니다.
+- 캡처: `tools/make_configurator_screenshots.py` (시뮬레이터에 연결해 예시 기록으로 그림).
 
 ---
 
@@ -549,7 +553,8 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700,3@172.27.0.82:502=1=0=REF
 | `run.py` | 실행 시작점 | – |
 | `motor_monitor/app.py` | 시작 절차(로그, 중복실행, 설정 읽기, 메인 창). 항상 모니터링 모드로 시작(`create_plant`), `--monitoring` 은 효과 없음 | `Application`, `MainWindow_Loaded` |
 | `run_monitoring.bat` | 예전 모니터링 모드 실행 파일 (지금은 일반 실행과 같음) | – |
-| `tools/ecblue_tester.py`, `ecblue_tester.bat`, `ecblue_tester.spec`, `build_tester_exe.bat`, `.github/workflows/build-tester-exe.yml` | `SCR-TESTER` 기존모터 시험기 (3.6절) | – |
+| `tools/ecblue_configurator.py`, `ecblue_configurator.bat`, `ecblue_configurator.spec`, `build_configurator_exe.bat`, `.github/workflows/build-tester-exe.yml`, `tests/test_configurator.py`, `tools/make_configurator_screenshots.py` | `SCR-CONFIG` ECblue configurator (3.6절) | – |
+| `tools/ecblue_bus.py` | ECblue 통신 공용부(`Bus`, `mode_text`, `error_text`). 미니 제어기가 사용 (예전 시험기 `ecblue_tester.py` 의 통신부를 그대로 옮김) | – |
 | `tools/motor_tester.py`, `motor_tester.bat`, `motor_tester.spec`, `build_motor_tester_exe.bat`, `.github/workflows/build-motor-tester-exe.yml`, `tests/test_motor_tester.py` | 모터 시험기 SUNINUS MOTOR TEST (`MOTOR_TESTER.exe` 새 구현, 매뉴얼 14장). 운영 프로그램과 별개 | – |
 | `tools/motor_scanner.py`, `motor_scanner.bat`, `motor_scanner.spec`, `build_motor_scanner_exe.bat`, `.github/workflows/build-motor-scanner-exe.yml`, `tests/test_motor_scanner.py` | 모터 스캐너 (매뉴얼 15장). ID 스캔, ECblue 상태·설정, 통신 워치독(h17). 운영 프로그램과 별개 | – |
 | `tools/ecblue_check.py` | 기존모터제어(ECblue) 현장 점검: 1단계 읽기 전용(h1~h4, i14), 2단계 `--rpm` 지정 시 `HouseLine._ctrl_job` 으로 실제 제어 시험 → 판정 → 시험 전 h1/h2/h4 복원. 임시 설정 파일 사용(운영 Config.dll 미접촉), 결과 `logs/ecblue_check_*.txt`. `--ids` 범위(170-190)·9개 이상이면 i14 만 읽어 응답 ID 찾기, `--timeout`, 응답 없을 때 받은 원시 데이터 표시 | – |
@@ -570,7 +575,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700,3@172.27.0.82:502=1=0=REF
 | `motor_monitor/ui/widgets.py` | 버튼, 상태 점, 툴팁, 모터 목록 | XAML 템플릿 |
 | `motor_monitor/ui/tools.py` | `SCR-ERRLOG` 에러 로그 창, `DLG-IMPORT-CFG`, `DLG-IMPORT-MINI` 설정 가져오기 창 | – (신규) |
 | `motor_monitor/ui/theme.py` | 색상·글꼴·그림 | XAML 색상값 |
-| `tests/` | 자동 시험. 운영 프로그램: `test_core.py`, `test_ui.py`, `test_zone_requests.py`(ID 범위, 구역 참조 %, 모니터링, 재접속 표시, 에러 로그, 가져오기), `test_followup_requests.py`(PORT 502 고정, 창 위치, 메시지 창), `test_speed_requests.py`(30초 점검·즉시 점검, 목표 그대로 보냄(보정 없음), 최고속도, 확인 창 키, 행 음영, 속도 보냄 붉은 표시), `test_display_requests.py`(새 팬 기본값 770/70%, 개나리색 아이콘, 수동/참조 표시) | – |
+| `tests/` | 자동 시험. 운영 프로그램: `test_core.py`, `test_ui.py`, `test_zone_requests.py`(ID 범위, 구역 참조 %, 모니터링, 재접속 표시, 에러 로그, 가져오기), `test_followup_requests.py`(PORT 502 고정, 창 위치, 메시지 창), `test_speed_requests.py`(30초 점검·즉시 점검, 목표 그대로 보냄(보정 없음), 최고속도, 확인 창 키, 행 음영, 속도 보냄 붉은 표시), `test_display_requests.py`(새 팬 기본값 770/70%, 개나리색 아이콘, 수동/참조 표시). ECblue configurator: `test_configurator.py`(장치 1대 연결, 레지스터 의미, 확인 주기·10초 단위 체크, 24시간 보관, 그래프 보기, 속도 지정·원래대로, 자동 운전) | – |
 | `tools/` | 문서용 화면 캡처/번호 표시 | – |
 
 ---
@@ -593,6 +598,7 @@ H1R1_MOTORS=2@172.27.0.82:502=1=700,3@172.27.0.82:502=1=0=REF
 
 | 버전 | 날짜 | 변경 내용 | 관련 ID |
 |---|---|---|---|
+| 2.6.0 | 2026-11-03 | **ECblue configurator** (`SCR-CONFIG`, 예전 기존모터 시험기 `SCR-TESTER` 대체, 요청 9건): ① 이름 ECblue configurator, 실행파일 `ECBLUE_CONFIGURATOR.exe`(`update.bat`·Release 에서 옛 `ECBLUE_TESTER.exe` 지움) ② IP·ID 를 골라 장치 1대만 모니터링·설정 ③ 연결하면 레지스터 값과 의미 표시(모터 스캐너 정의 재사용) ④ 속도 그래프(실제 i14·지정 h2, 기본 1시간) ⑤ 기록은 메모리에 최대 24시간, 닫으면 지움 ⑥ 30초마다 확인, [10초 단위 체크] ⑦ 보기 10분·1시간·6시간·12시간·24시간 ⑧ 10초 단위 체크는 10분 보기에서만 ⑨ 통신 끊김 시 자동 운전(h17 시작 시간 + h5 속도) 지금 값 확인·함께 설정·끄기. 미니 제어기는 통신부를 `tools/ecblue_bus.py` 에서 가져옴(내용 같음) | `SCR-CONFIG`, `CFG-*`, 3.6 |
 | 2.6.0 | 2026-11-03 | **운영 프로그램 요청 5건**: ① 현장 Config.dll 을 모든 구역 수동 770 RPM 으로 수정(기존모터제어는 이미 수동 770 = 70%, 파일은 따로 전달) ② 새 팬 기본값: 설정 값이 없는 구역은 수동 770 RPM, 기존모터제어 추가 창은 수동 지정 770 RPM(70%), 구역설정 창은 정한 적 없는 수동 칸에 770 ④ 신규모터 팬 그림 주황 → 개나리색 ⑤ 속도를 보내면 깜빡임 대신 1초 동안 붉은 팬 그림 + 붉은 행 ⑥ 상태 칸에 수동/참조 표시 (구역설정 저장 시 바로 갱신) | `P-DEFAULT-MANUAL-RPM`, `P-DEFAULT-CTRL-PCT`, `C-LIST-SENT`, `C-SRC-*`, `LIST-SRC`, 3.2, 3.3 |
 | 2.5.1 | 2026-11-03 | **속도 보정 기능 삭제** (요청): 실제 속도로 지정값을 올리고 내리는 보정, 60초 무반응 시 보정 멈춤·속도 미달 알림, 보정값 기억(`speed_memory.json`)과 최초 신호, 1% 이내 설정 변화 무시를 삭제 → 목표 속도를 그대로 보냄(모터 값과 다를 때만, 2.5.0 이전과 같음). 유지: 30초 점검·즉시 점검, ID 순 정렬, 확인 창 키보드, 문제 행 음영, 속도 보냄 깜빡임, 모터 최고속도(h8) 대비 % 표시·알림 | `P-SPEED-STEP/STALL/MEMORY` 없앰, `P-SPEED-TOL`(표시용), 4.3, 4.5, 4.6 |
 | 2.5.0 | 2026-11-03 | **운영 프로그램 요청 7건 + 추가 2건**: ① 목록은 ID 순서가 기본 ② 확인 창을 키보드로: Enter·Space·Y = 예, Esc·N = 아니오 ③ 문제 상태 행 음영 ④ 설정 속도 1% 이내는 오차로 인정(설정이 1% 이내로 바뀌어도 다시 보내지 않음) ⑤ 느리면 지정값을 2~3%씩 올림(최대값 이하), 올려도 60초 동안 속도가 그대로면 더 보내지 않고 알림 ⑥ 오차 안에 든 지정값을 기억(`speed_memory.json`)해 다음 실행의 최초 신호로 ⑦ 팬 속도는 30초에 한 번 점검(설정 변경·제어 모드 전환 시 바로) / 추가: 기존모터제어 모터 최고속도(h8)를 읽어 최고속도 대비 % 계산·표시, 보정 상한·알림에 사용(속도는 절대 회전수 그대로 - 문서 근거 4.5절), 속도 변경을 보내면 팬 그림이 1초 동안 두 번 붉게 깜빡 | `P-CHECK-INTERVAL`, `P-SPEED-*`, `C-LIST-PROBLEM`, `DLG-MSG` 키, `DLG-MOTOR-LBL-MOTORMAX`, 3.2, 4.3, 4.5, 4.6, 7.1-1 |

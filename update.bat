@@ -16,7 +16,13 @@ if errorlevel 1 (
 
 echo.
 echo [2/2] Downloading latest executables...
-for %%E in (BLDC_MOTOR_MONITOR MOTOR_SCANNER MOTOR_TESTER MINI_CONTROL ECBLUE_TESTER) do call :getexe %%E
+for %%E in (BLDC_MOTOR_MONITOR MOTOR_SCANNER MOTOR_TESTER MINI_CONTROL ECBLUE_CONFIGURATOR) do call :getexe %%E
+REM ECBLUE_TESTER.exe was renamed to ECBLUE_CONFIGURATOR.exe - remove the old file
+if not exist ECBLUE_TESTER.exe goto noold
+del /q ECBLUE_TESTER.exe >nul 2>&1
+if exist ECBLUE_TESTER.exe echo   ECBLUE_TESTER.exe: old program is open - close it and delete the file
+if not exist ECBLUE_TESTER.exe echo   ECBLUE_TESTER.exe: removed - renamed to ECBLUE_CONFIGURATOR.exe
+:noold
 
 echo.
 if "%FAIL%"=="0" goto ok

@@ -15,14 +15,14 @@ python run.py              # Python 3.9+ (표준 라이브러리만 사용)
 python run.py --debug      # 통신 패킷 로그 포함
                            # 항상 모니터링 모드(읽기만, 제어 신호 전송 안 함)로 시작.
                            # 제어하려면 화면 맨 위 띠의 [제어 모드로 전환] 버튼. 에러 로그·설정 가져오기 버튼도 띠에 있음
-ecblue_tester.bat          # 기존모터 시험기 (172.27.0.95, ID 180·176 고정) - 매뉴얼 12장
+ecblue_configurator.bat    # ECblue configurator: IP·ID 로 ECblue 1대 연결, 레지스터 의미, 속도 그래프, 자동 운전 - 매뉴얼 12장
 mini_control.bat           # 미니 제어기: IP·ID 로 팬 추가, 속도 % 또는 참조팬 지정 - 매뉴얼 13장
 motor_tester.bat           # 모터 시험기(SUNINUS MOTOR TEST, MOTOR_TESTER.exe 새 구현) - 매뉴얼 14장
 build_motor_tester_exe.bat # 모터 시험기 실행파일 dist\MOTOR_TESTER.exe 만들기 (GitHub Actions 에서도 자동 빌드)
 motor_scanner.bat          # 모터 스캐너: IP 의 모터 ID 찾기, ECblue 설정·통신 끊김 시 자동 운전 - 매뉴얼 15장
 build_motor_scanner_exe.bat # 모터 스캐너 실행파일 dist\MOTOR_SCANNER.exe 만들기 (GitHub Actions 에서도 자동 빌드)
 build_mini_exe.bat         # 미니 제어기 실행파일 dist\MINI_CONTROL.exe 만들기 (GitHub Actions 에서도 자동 빌드)
-build_tester_exe.bat       # 시험기 실행파일 dist\ECBLUE_TESTER.exe 만들기 (GitHub Actions 에서도 자동 빌드)
+build_configurator_exe.bat # ECblue configurator 실행파일 dist\ECBLUE_CONFIGURATOR.exe 만들기 (GitHub Actions 에서도 자동 빌드)
 build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
 ```
 설정은 실행 폴더의 `Config.dll`(운영 프로그램과 같은 암호화 파일), 로그는 `logs/` 에 저장됩니다.
@@ -30,7 +30,8 @@ build_exe.bat              # Windows 실행파일 만들기 (PyInstaller)
 
 ## 최신 버전으로 업데이트
 git 으로 받은 폴더에서 `update.bat` 을 더블클릭하면 GitHub `main` 의 최신 내용으로 바뀌고,
-실행파일(운영 프로그램 `BLDC_MOTOR_MONITOR.exe`, `MOTOR_SCANNER.exe`, `MOTOR_TESTER.exe`, `MINI_CONTROL.exe`, `ECBLUE_TESTER.exe`)도 같은 폴더에 최신으로 내려받습니다
+실행파일(운영 프로그램 `BLDC_MOTOR_MONITOR.exe`, `MOTOR_SCANNER.exe`, `MOTOR_TESTER.exe`, `MINI_CONTROL.exe`, `ECBLUE_CONFIGURATOR.exe`)도 같은 폴더에 최신으로 내려받습니다
+(예전 `ECBLUE_TESTER.exe` 는 이름이 바뀌어 지움)
 (GitHub Release `exe-latest`, main 반영 시 Actions 가 자동 교체).
 `Config.dll`, 설정 파일, `logs/` 는 git 관리 대상이 아니라 업데이트해도 그대로 유지됩니다.
 
