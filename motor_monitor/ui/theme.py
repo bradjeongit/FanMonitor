@@ -106,6 +106,29 @@ def _scaled(img: tk.PhotoImage, target: int) -> tk.PhotoImage:
     return img.zoom(z, z).subsample(s, s) if z > 1 else img.subsample(s, s)
 
 
+PHOTO_LOAD_TRIES = 3            # 그림 읽기 시도 횟수
+PHOTO_RETRY_SEC = 0.05          # 다시 읽기 전 대기
+
+
+def load_photo(root: tk.Misc, path: str) -> tk.PhotoImage:
+    """PNG 그림 읽기. 파일은 파이썬으로 읽어 data 로 넘기고(Tcl 파일 읽기를 거치지 않음),
+    TclError 가 나면 잠깐 기다렸다 다시 시도 (최대 PHOTO_LOAD_TRIES 번).
+    근거: Windows 빌드 시험에서 tk.PhotoImage(file=...) 가 메시지 없는 TclError 로 드물게 실패함
+    (2026-11 두 번, 서로 다른 그림·시험, 다시 실행하면 통과). 파일이 없으면 OSError 를 그대로 냄."""
+    import base64
+    import time
+    with open(path, "rb") as f:
+        data = base64.b64encode(f.read())
+    for attempt in range(1, PHOTO_LOAD_TRIES + 1):
+        try:
+            return tk.PhotoImage(master=root, data=data, format="png")
+        except tk.TclError:
+            if attempt == PHOTO_LOAD_TRIES:
+                raise
+            time.sleep(PHOTO_RETRY_SEC)
+    raise AssertionError("unreachable")
+
+
 class Images:
     """원본 images 폴더의 그림을 원본 화면과 같은 크기로 준비."""
 
@@ -118,7 +141,7 @@ class Images:
         key = (name, size)
         if key not in self._cache:
             if name not in self._raw:
-                self._raw[name] = tk.PhotoImage(master=self.root, file=os.path.join(ASSET_DIR, f"{name}.png"))
+                self._raw[name] = load_photo(self.root, os.path.join(ASSET_DIR, f"{name}.png"))
             self._cache[key] = _scaled(self._raw[name], size)
         return self._cache[key]
 
