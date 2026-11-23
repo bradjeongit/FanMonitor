@@ -417,3 +417,36 @@ def test_new_motor_dialog_monitor_only_option(root, tmp_path, monkeypatch):
     d.mon_var.set(0)
     d.on_save()
     assert not p.houses["H1R1"].get_motor("1_4").mon_only
+
+
+def test_photo_load_retries_on_tcl_error(root, monkeypatch):
+    """Windows 에서 드물게 나는 메시지 없는 TclError: 그림 읽기를 다시 시도 (최대 3번)."""
+    import tkinter as tk
+    from motor_monitor.ui import theme as T
+    real = tk.PhotoImage
+    calls = []
+
+    def flaky(*a, **k):
+        if "data" not in k:                       # 크기 조정(zoom/subsample)이 만드는 그림은 세지 않음
+            return real(*a, **k)
+        calls.append(1)
+        if len(calls) < 3:
+            raise tk.TclError("")
+        return real(*a, **k)
+    monkeypatch.setattr(T.tk, "PhotoImage", flaky)
+    monkeypatch.setattr(T, "PHOTO_RETRY_SEC", 0)
+    img = T.Images(root).get("good", 20)
+    assert len(calls) == 3 and img.width() == 20
+    calls.clear()
+
+    def always(*a, **k):
+        if "data" not in k:
+            return real(*a, **k)
+        calls.append(1)
+        raise tk.TclError("")
+    monkeypatch.setattr(T.tk, "PhotoImage", always)
+    with pytest.raises(tk.TclError):
+        T.Images(root).get("bad_new", 20)
+    assert len(calls) == T.PHOTO_LOAD_TRIES
+    monkeypatch.setattr(T.tk, "PhotoImage", real)
+    assert T.Images(root).get("oldmotor_ctrl", 20).width() == 20      # data= 로 읽은 그림 크기 그대로
