@@ -162,6 +162,8 @@ ECB_H_CONTROL = 1      # h1 Control: bit0 Enable
 ECB_H_SPEED = 2        # h2 Speed control: 제어모드 1 이면 절대 회전수(1/min), 휘발성
 ECB_H_COMPARAM = 3     # h3 COM 파라미터 (읽기만)
 ECB_H_CONTROLMODE = 4  # h4 Controlmode: bit[3:0] 속도제어 방식, bit8 Buscon enable (NV, PIN 2단계)
+ECB_H_SETINTERN1 = 5   # h5 Set Intern1: 정속 운전 속도(1/min, NV, PIN 1단계) - 통신 끊김 시 자동 운전 속도
+ECB_H_WATCHDOG = 17    # h17 통신 워치독: bit15~8 시간(초, 0=꺼짐), bit7~0 동작(2 = 정속 운전) (NV, PIN 2단계)
 ECB_I_SPEED = 14       # i14 실제 회전수(1/min) - 기존모터 읽기와 같은 주소
 ECB_PIN_LEVEL2 = 10    # PIN "0010"
 

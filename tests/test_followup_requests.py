@@ -114,7 +114,7 @@ def test_dialog_opens_inside_main_window(shown_root, plant):
 
 
 def test_motor_dialog_stays_inside_when_it_grows(shown_root, plant):
-    """기존모터제어를 고르면 창이 커짐(340 -> 460): 프로그램 창 아래로 넘치지 않게 위로 올림."""
+    """기존모터제어를 고르면 창이 커짐(340 -> 내용 높이): 프로그램 창 아래로 넘치지 않게 위로 올림."""
     from motor_monitor.ui import dialogs
     from motor_monitor.ui import theme as T
     images = T.Images(shown_root)
@@ -129,7 +129,7 @@ def test_motor_dialog_stays_inside_when_it_grows(shown_root, plant):
         d.on_cancel()
     shown_root.after(300, check)
     d.show_modal()
-    assert seen["before"][3] == 340 and seen["after"][3] == 460
+    assert seen["before"][3] == 340 and seen["after"][3] > 400
     assert _inside(seen["before"], outer) and _inside(seen["after"], outer)
 
 
@@ -181,7 +181,7 @@ def test_message_over_dialog_returns_to_dialog(shown_root, plant):
         d.on_cancel()
     shown_root.after(300, step)
     d.show_modal()
-    assert state["msg"] == "기존모터 접속 IP가 올바른 형식이 아닙니다.."
+    assert state["msg"] == "기존모터 접속 IP 1이 올바른 형식이 아닙니다.."
     assert _inside(state["rect"], outer)
     mx, my, mw, mh = state["rect"]
     dx, dy, dw, dh = state["dlg"]

@@ -121,17 +121,29 @@ def test_config_defaults_and_roundtrip(tmp_path):
     assert m.use_limit and m.limit_rpm == 500
 
 
-def test_load_then_save_is_byte_identical(tmp_path):
+def test_load_then_save_keeps_old_keys_and_moves_zone_source_to_motors(tmp_path):
+    """2.6.0 까지의 파일: 읽고 저장해도 예전 키·값은 그대로, 구역 RPM 제어 소스는 신규모터마다 옮겨 받음."""
     text = ("[LINE_CONFIG]\r\n" + "".join(
         f"H1R{i}_SOURCE_IP=10.0.0.{i}\r\nH1R{i}_SOURCE_PORT=502\r\nH1R{i}_TARGEIP=10.0.1.{i}\r\n"
-        f"H1R{i}_TARGEPORT=502\r\nH1R{i}_SOURCE_MANUAL=0\r\nH1R{i}_MANUAL_RPM=0\r\n"
+        f"H1R{i}_TARGEPORT=502\r\nH1R{i}_SOURCE_MANUAL={1 if i == 2 else 0}\r\nH1R{i}_MANUAL_RPM={600 if i == 2 else 0}\r\n"
         f"H1R{i}_SOURCE_LINE=H1R{i}\r\nH1R{i}_SOURCE_ID={i}\r\n" for i in range(1, 9))
         + "[MOTOR_CONFIG]\r\n" + "".join(f"H1R{i}_MOTORS={i}=0=1=0=0,3=1=1=1=450,1=1=1=0=0\r\n" for i in range(1, 9)))
     path = tmp_path / "Config.dll"
     path.write_bytes(encrypt_config(text))
-    original = path.read_bytes()
-    Plant(str(path)).load()
-    assert path.read_bytes() == original
+    p = Plant(str(path))
+    p.load()
+    saved = decrypt_config(path.read_bytes())
+    for line in text.splitlines():
+        assert line in saved.splitlines(), line                  # 예전 키·값은 그대로 (예전 버전으로 되돌려도 같음)
+    m = p.houses["H1R1"].get_motor("1_3")
+    assert (m.ctrl_mode, m.ref_line, m.ref_gw, m.ref_id) == ("ref", "H1R1", 1, 1)   # 구역 참조 -> 모터별 참조
+    m = p.houses["H1R2"].get_motor("1_1")
+    assert (m.ctrl_mode, m.set_rpm) == ("manual", 600)                               # 구역 수동 -> 모터별 수동
+    assert "[MOTOR_OPTION]" in saved and "H1R1_MOTORS=0_1/GW:1,1_3/SRC:R/RPM:770/REF:H1R1-1-1/MON:0" in saved
+    # 다시 읽어도 같음 (모터별 설정을 읽음)
+    q = Plant(str(path))
+    q.load()
+    assert [m.entry() for m in q.houses["H1R1"].get_list()] == [m.entry() for m in p.houses["H1R1"].get_list()]
 
 
 def test_corrupt_config_is_not_overwritten(tmp_path):
@@ -216,16 +228,18 @@ def test_status_only_updates_while_running(tmp_path):
 def test_limit_and_reference(tmp_path):
     plant, h = _house(tmp_path)
     h.add_motor(2, MotorType.OLD_MOTOR, True)
-    h.add_motor(13, MotorType.NEW_MOTOR, True, True, 500)
-    plant.configs["H1R1"] = plant.configs["H1R1"].copy(source_manual=False, source_line="H1R1", source_id=2)
+    h.add_motor(13, MotorType.NEW_MOTOR, True, True, 500, ctrl_mode="ref", ref_line="H1R1", ref_id=2)
     h._handle_src_frame(bytes([0, 0, 0, 0, 0, 5, 2, 4, 2, 0x03, 0x02]))   # 기존모터 2 = 770
-    assert h.resolve_setting_rpm() == 770
+    m = h.get_motor("1_13")
+    assert h.resolve_setting_rpm(m) == 770 and plant.reference_ok("H1R1", m)
     p2 = bytes([0, 1, 0, 0, 0, 17, 13, 3, 14, 0, 1, 0, 1, 0, 0, 0x01, 0xF4] + [0] * 6)  # 이미 500
     h._handle_tgt_frame(p2)
     assert list(h._tgt_write_q) == []          # 제한 500 적용 -> 쓸 것 없음
-    assert plant.find_reference_users("H1R1", 2) == ["H1R1"]
-    plant.configs["H1R1"] = plant.configs["H1R1"].copy(source_id=99)    # 없는 모터 참조
-    assert h.resolve_setting_rpm() is None and not plant.reference_ok("H1R1")
+    assert plant.find_reference_users("H1R1", 2) == ["1구역 신규모터 ID 13"]
+    assert plant.find_reference_users("H1R1", 2, gw=2) == []                  # 통신장치 2 의 같은 ID 는 다른 모터
+    h.mod_motor("1_13", True, True, 500, ref=("H1R1", 1, 99))               # 없는 모터 참조
+    m = h.get_motor("1_13")
+    assert h.resolve_setting_rpm(m) is None and not plant.reference_ok("H1R1", m)
 
 
 # ---------------------------------------------------------------- 통신 통합 시험 (시뮬레이터)
@@ -257,11 +271,10 @@ def test_control_loop(tmp_path, fast):
         code = "H1R5"
         h = plant.houses[code]
         h.add_motor(126, MotorType.OLD_MOTOR, True)
-        h.add_motor(1, MotorType.NEW_MOTOR, True)
-        h.add_motor(4, MotorType.NEW_MOTOR, True, True, 400)        # 속도제한 400
+        h.add_motor(1, MotorType.NEW_MOTOR, True, ctrl_mode="ref", ref_line=code, ref_id=126)
+        h.add_motor(4, MotorType.NEW_MOTOR, True, True, 400, ctrl_mode="ref", ref_line=code, ref_id=126)  # 속도제한 400
         plant.configs[code] = plant.configs[code].copy(
-            source_ip=gw_old.host, source_port=gw_old.port, target_ip=gw_new.host, target_port=gw_new.port,
-            source_manual=False, source_line=code, source_id=126)
+            source_ip=gw_old.host, source_port=gw_old.port, target_ip=gw_new.host, target_port=gw_new.port)
 
         plant.start_line(code)
         assert _wait(lambda: h.get_motor("0_126").rpm == 770)
@@ -274,7 +287,8 @@ def test_control_loop(tmp_path, fast):
         assert _wait(lambda: h.get_motor("1_1").rpm == 770 and h.get_motor("1_4").rpm == 400)
         assert h.get_motor("1_1").status == MotorStatus.OK
 
-        plant.configs[code] = plant.configs[code].copy(source_manual=True, manual_rpm=300)
+        h.mod_motor("1_1", True, set_rpm=300, ctrl_mode="manual")              # 모터마다 수동 RPM
+        h.mod_motor("1_4", True, True, 400, set_rpm=300, ctrl_mode="manual")
         assert _wait(lambda: gw_new.new_regs[1][modbus.NEW_REG_RPM] == 300)
         assert _wait(lambda: gw_new.new_regs[4][modbus.NEW_REG_RPM] == 300)   # 제한보다 낮으면 그대로
 
@@ -298,10 +312,9 @@ def test_reference_not_ok_holds_control(tmp_path, fast):
         code = "H1R1"
         h = plant.houses[code]
         h.add_motor(5, MotorType.OLD_MOTOR, True)       # 수신 없음 -> 대기
-        h.add_motor(10, MotorType.NEW_MOTOR, True)
+        h.add_motor(10, MotorType.NEW_MOTOR, True, ctrl_mode="ref", ref_line=code, ref_id=5)
         plant.configs[code] = plant.configs[code].copy(
-            source_ip="127.0.0.1", source_port=1, target_ip=gw_new.host, target_port=gw_new.port,
-            source_manual=False, source_line=code, source_id=5)
+            source_ip="127.0.0.1", source_port=1, target_ip=gw_new.host, target_port=gw_new.port)
         h.service_start()
         assert _wait(lambda: len(gw_new.requests) >= 4)
         assert gw_new.writes == []
@@ -516,8 +529,11 @@ def test_ctrl_motor_monitoring_never_writes(tmp_path, fast):
         h = plant.houses["H1R1"]
         h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, set_rpm=700)
         key = f"2_2@{gw.host}:{gw.port}"
+        gw.ecb[2]["h"][17] = (60 << 8) | 2                  # 통신 끊김 시 자동 운전이 이미 켜져 있음 -> 쓰지 않음
+        gw.ecb[2]["h"][5] = 770
         plant.start_line("H1R1")
         assert _wait(lambda: h.get_motor(key).rpm == 450)
+        assert _wait(lambda: h.get_motor(key).wd_state == "ok")
         h.mod_motor(key, False)
         time.sleep(0.5)
         assert gw.writes == [] and all(r[7] != 6 for r in gw.requests)

@@ -198,8 +198,9 @@ class MiniImportDialog(BaseDialog):
         tk.Label(self.body, text=f"파일: {path}", bg=T.WHITE, font=T.font(9, bold=True), anchor="w",
                  wraplength=610, justify="left").pack(side="top", fill="x", padx=12, pady=(10, 4))
         tk.Label(self.body, text=f"항목 {len(items)}개를 기존모터제어로 추가합니다. 속도 %는 수동 지정 RPM"
-                                 f"(100% = {MAX_RPM} RPM), 참조팬 항목은 '구역 참조'(그 구역 신규모터가 따르는 값을 "
-                                 f"{MAX_RPM} RPM 대비 %로 같은 비율)로 바꿉니다. 미니 제어기에 지정한 참조팬은 쓰지 않습니다.",
+                                 f"(100% = {MAX_RPM} RPM), 참조팬 항목은 그 참조팬(IP·ID)이 등록된 구역의 기존모터를 "
+                                 f"참조({MAX_RPM} RPM 대비 % 와 같은 비율)하도록 바꿉니다. 참조팬 IP 가 어느 구역의 "
+                                 "기존모터 IP 1·2 에도 없으면 그 구역이 예전에 따르던 값으로 정합니다.",
                  bg=T.WHITE, fg=T.TEXT_DARK, font=T.font(9), anchor="w", wraplength=610,
                  justify="left").pack(side="top", fill="x", padx=12)
         box = tk.Frame(self.body, bg=T.WHITE)
@@ -210,8 +211,13 @@ class MiniImportDialog(BaseDialog):
             self.tree.column(c, width=w, anchor="w")
         for it in items:
             if it.is_ref:
-                was = f" (미니 제어기 참조팬 {it.ref_ip} ID {it.ref_uid} 대신)" if it.ref_ip else ""
-                spec = f"구역 참조{was}"
+                found = plant.find_old_gateway(it.ref_ip) if it.ref_ip else None
+                if found is not None:
+                    spec = (f"참조 {get_house_name(found[0])} 기존모터{' 2' if found[1] == 2 else ''} "
+                            f"ID {it.ref_uid} ({it.ref_ip})")
+                else:
+                    spec = (f"참조팬 {it.ref_ip or '-'} ID {it.ref_uid}: 등록된 기존모터 IP 가 아니라 "
+                            "구역의 예전 값으로")
             else:
                 spec = f"수동 지정 {it.rpm} RPM ({pct_text(it.pct)})"
             self.tree.insert("", "end", values=(it.ip, it.uid, spec))

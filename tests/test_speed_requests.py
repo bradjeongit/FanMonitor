@@ -53,9 +53,9 @@ def test_speed_within_is_display_only():
         import motor_monitor.speedtrim  # noqa: F401                    # 보정 모듈 없음
 
 
-def _zone(p, gw, rpm=800):
+def _zone(p, gw):
     p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip=gw.host, source_port=gw.port, target_ip=gw.host,
-                                               target_port=gw.port, source_manual=True, manual_rpm=rpm)
+                                               target_port=gw.port)
 
 
 def test_new_motor_gets_target_as_is_without_correction(tmp_path, fast):
@@ -67,7 +67,7 @@ def test_new_motor_gets_target_as_is_without_correction(tmp_path, fast):
         p = _plant(tmp_path)
         _zone(p, gw)
         h = p.houses["H1R1"]
-        h.add_motor(5, MotorType.NEW_MOTOR, True)
+        h.add_motor(5, MotorType.NEW_MOTOR, True, set_rpm=800)
         p.start_line("H1R1")
         assert _wait(lambda: h.get_motor("1_5").rpm == 720)               # 실제 = 800 x 0.9
         time.sleep(0.8)                                                    # 점검 여러 번
@@ -88,12 +88,12 @@ def test_target_change_is_sent_as_is(tmp_path, fast):
         p = _plant(tmp_path)
         _zone(p, gw)
         h = p.houses["H1R1"]
-        h.add_motor(5, MotorType.NEW_MOTOR, True)
+        h.add_motor(5, MotorType.NEW_MOTOR, True, set_rpm=800)
         p.start_line("H1R1")
         assert _wait(lambda: _rpm_writes(gw, 5) == [800])
         time.sleep(0.4)
         assert _rpm_writes(gw, 5) == [800]                                 # 같으면 다시 보내지 않음
-        p.set_line_config("H1R1", p.configs["H1R1"].copy(manual_rpm=805))
+        h.mod_motor("1_5", True, set_rpm=805)
         assert _wait(lambda: _rpm_writes(gw, 5) == [800, 805])
         h.service_stop(join=True)
     finally:
@@ -108,7 +108,7 @@ def test_new_motor_limit_is_sent(tmp_path, fast):
         p = _plant(tmp_path)
         _zone(p, gw)
         h = p.houses["H1R1"]
-        h.add_motor(7, MotorType.NEW_MOTOR, True, True, 500)               # 속도제한 500
+        h.add_motor(7, MotorType.NEW_MOTOR, True, True, 500, set_rpm=800)  # 속도제한 500
         p.start_line("H1R1")
         assert _wait(lambda: _rpm_writes(gw, 7) == [500])
         time.sleep(0.5)
@@ -177,11 +177,11 @@ def test_setting_change_is_applied_without_waiting(tmp_path, fast, monkeypatch):
         p = _plant(tmp_path)
         _zone(p, gw)
         h = p.houses["H1R1"]
-        h.add_motor(5, MotorType.NEW_MOTOR, True)
+        h.add_motor(5, MotorType.NEW_MOTOR, True, set_rpm=800)
         p.start_line("H1R1")
         assert _wait(lambda: _rpm_writes(gw, 5) == [800], timeout=3)      # 시작하면 바로 첫 점검
         t0 = time.time()
-        p.set_line_config("H1R1", p.configs["H1R1"].copy(manual_rpm=900))
+        h.mod_motor("1_5", True, set_rpm=900)
         assert _wait(lambda: _rpm_writes(gw, 5) == [800, 900], timeout=3)  # 30초를 기다리지 않음
         assert time.time() - t0 < 3
         h.service_stop(join=True)
@@ -197,7 +197,7 @@ def test_switching_to_control_mode_sends_at_once(tmp_path, fast, monkeypatch):
         p = _plant(tmp_path, monitoring=True)
         _zone(p, gw)
         h = p.houses["H1R1"]
-        h.add_motor(5, MotorType.NEW_MOTOR, True)
+        h.add_motor(5, MotorType.NEW_MOTOR, True, set_rpm=800)
         p.start_line("H1R1")
         assert _wait(lambda: h.get_motor("1_5").status == MotorStatus.OK, timeout=3)
         assert _rpm_writes(gw, 5) == []                             # 모니터링 모드: 쓰지 않음
@@ -283,9 +283,11 @@ def test_problem_rows_are_shaded(shown_root):
     shown_root.update()
     lv.set_rows([ok, comm, old, slow, off])
     fills = {lv.canvas.gettags(i)[1]: lv.canvas.itemcget(i, "fill") for i in lv.canvas.find_withtag("rowbg")}
-    assert fills == {"row1": T.LIST_PROBLEM_BG, "row2": T.LIST_PROBLEM_BG, "row3": T.LIST_PROBLEM_BG}
-    assert MotorListView.row_fill(comm, True, False) == T.LIST_PROBLEM_SELECTED
-    assert MotorListView.row_fill(comm, False, True) == T.LIST_PROBLEM_HOVER
+    # 2.7.0: 작동 안 하는 팬(통신 에러·오래 응답 없음)은 붉게, 속도 미달은 붉은 음영
+    assert fills == {"row1": T.LIST_DEAD_BG, "row2": T.LIST_DEAD_BG, "row3": T.LIST_PROBLEM_BG}
+    assert MotorListView.row_fill(comm, True, False) == T.LIST_DEAD_SELECTED
+    assert MotorListView.row_fill(comm, False, True) == T.LIST_DEAD_HOVER
+    assert MotorListView.row_fill(slow, True, False) == T.LIST_PROBLEM_SELECTED
     assert MotorListView.row_fill(ok, True, False) == T.LIST_SELECTED and MotorListView.row_fill(ok, False, False) is None
     icon, tip = MotorListView.status_icon(slow)
     assert icon == "bad_haderr" and tip.startswith("속도 미달\n설정 800 RPM 보다 느림")
@@ -334,6 +336,7 @@ def test_max_speed_alert_only_in_control_mode(tmp_path, fast):
         h = p.houses["H1R1"]
         h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, set_rpm=700)
         key = f"2_2@{gw.host}:{gw.port}"
+        gw.ecb[2]["h"][5], gw.ecb[2]["h"][17] = 700, (240 << 8) | 2      # 자동 운전은 이미 켜져 있음 (쓰기 없음)
         p.start_line("H1R1")
         assert _wait(lambda: h.get_motor(key).max_rpm == 600 and h.get_motor(key).target_rpm == 700)
         time.sleep(0.5)                                             # 점검 여러 번
@@ -354,7 +357,7 @@ def test_speed_send_marks_motor(tmp_path, fast):
         p = _plant(tmp_path)
         _zone(p, gw)
         h = p.houses["H1R1"]
-        h.add_motor(5, MotorType.NEW_MOTOR, True)
+        h.add_motor(5, MotorType.NEW_MOTOR, True, set_rpm=800)
         assert h.get_motor("1_5").sent_at is None
         p.start_line("H1R1")
         assert _wait(lambda: h.get_motor("1_5").sent_at is not None)      # 속도(0x16)를 보냄
@@ -398,7 +401,8 @@ def test_sent_motor_icon_and_row_turn_red_for_one_second(shown_root):
     for name in ("oldmotor_red", "newmotor_red", "newmotor_limit_red", "oldmotor_ctrl_red"):
         assert lv.images.get(name, 20) is not None                  # 붉은 그림 파일
     # 문제 행(음영)이어도 보낸 1초 동안은 붉은 행, 그 뒤 문제 음영으로 돌아옴
-    bad = Motor(8, MotorType.OLD_CTRL, True, status=MotorStatus.OK, had_err=True, sent_at=time.monotonic())
+    bad = Motor(8, MotorType.OLD_CTRL, True, status=MotorStatus.OK, rpm=500, had_err=True, err_note="제어 문제",
+                ctrl_note="제어 문제", sent_at=time.monotonic())
     now[0] = 200.0
     lv.set_rows([bad])
     assert lv.drawn_icons == ["oldmotor_ctrl_red"] and _row_fills(lv) == {"row0": T.LIST_SENT_BG}

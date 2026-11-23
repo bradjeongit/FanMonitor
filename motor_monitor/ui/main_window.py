@@ -2,7 +2,8 @@
 
 구성: 맨 위 모드 표시 띠(색상·문구 + 설정 가져오기 / 에러 로그 / 모드 전환 버튼) + 1~8구역을 가로 8열로 배치.
   프로그램은 항상 모니터링 모드로 시작(app.create_plant). 구역 패널마다
-  제목줄(n구역) / 제어 시작·종료 버튼 / 머리 영역(통신상태 점, IP, RPM 소스, 설정·추가 버튼) / 모터 목록
+  제목줄(n구역) / 제어 시작·종료 버튼 / 머리 영역(통신상태 점과 기존모터 IP 1·IP 2·신규모터 IP, 설정·추가 버튼) /
+  모터 목록 (속도 지정은 2.7.0 부터 모터마다 정하므로 머리 영역에 RPM 소스 줄이 없음)
   (PORT 는 502 고정이라 표시하지 않음). 확인·알림 창과 다른 창은 모두 이 창 안 가운데에 뜸.
 """
 from __future__ import annotations
@@ -61,15 +62,14 @@ class ZonePanel(tk.Frame):
         for r in range(3):
             head.rowconfigure(r, weight=1, uniform="h")
 
-        def info_row(r: int, icon, tip: str):
+        def info_row(r: int, icon, tip: str, mark: str = ""):
             f = tk.Frame(head, bg=T.WHITE)
             f.grid(row=r, column=0, sticky="ew", padx=(5, 0))
-            if icon is not None:
-                lb = tk.Label(f, image=icon, bg=T.WHITE, bd=0)
-                Tooltip(lb, tip)
-            else:
-                lb = tk.Label(f, text="┖", bg=T.WHITE, width=2, anchor="w", bd=0, font=T.font(9))
+            lb = tk.Label(f, image=icon, bg=T.WHITE, bd=0)
+            Tooltip(lb, tip)
             lb.pack(side="left")
+            if mark:
+                tk.Label(f, text=mark, bg=T.WHITE, fg=T.TEXT_DARK, bd=0, font=T.font(7, bold=True)).pack(side="left")
             dot = StatusDot(f)
             dot.pack(side="left", padx=(5, 0))
             lbl = tk.Label(f, text="-", bg=T.WHITE, bd=0, font=T.font(9), anchor="w")
@@ -78,9 +78,9 @@ class ZonePanel(tk.Frame):
             Tooltip(lbl, lambda x, y, lbl=lbl: lbl.cget("text"))
             return dot, lbl
 
-        self.rec_SOURCE_NETSTATUS, self.lbl_old_ip = info_row(0, img.get("oldmotor", 15), "기존모터")
-        self.rec_TARGET_NETSTATUS, self.lbl_new_ip = info_row(1, img.get("newmotor", 15), "신규모터")
-        self.rec_SID_NETSTATUS, self.lbl_source = info_row(2, None, "")
+        self.rec_SOURCE_NETSTATUS, self.lbl_old_ip = info_row(0, img.get("oldmotor", 15), "기존모터 IP 1", "1")
+        self.rec_SOURCE2_NETSTATUS, self.lbl_old_ip2 = info_row(1, img.get("oldmotor", 15), "기존모터 IP 2", "2")
+        self.rec_TARGET_NETSTATUS, self.lbl_new_ip = info_row(2, img.get("newmotor", 15), "신규모터")
 
         btns = tk.Frame(head, bg=T.WHITE, width=30)
         btns.grid(row=0, column=1, rowspan=3, sticky="ns")
@@ -271,7 +271,7 @@ class MainWindow:
         self.update_network_status()
 
     def after_line_saved(self) -> None:
-        """구역설정 저장 후: 머리 영역 문구와 목록(신규모터의 수동/참조 표시)을 바로 갱신."""
+        """구역설정 저장 후: 머리 영역 문구와 목록(IP 열)을 바로 갱신."""
         self.update_header_box()
         self.refresh_lists(force=True)
 
@@ -355,26 +355,25 @@ class MainWindow:
 
     # ------------------------------------------------------------ 표시
     def update_header_box(self) -> None:
-        """구역 머리 영역의 IP, RPM 소스 문구 갱신 (운영 Update_HeaderBox. PORT 는 502 고정이라 표시 안 함)"""
+        """구역 머리 영역의 IP 문구 갱신 (운영 Update_HeaderBox. PORT 는 502 고정이라 표시 안 함)"""
         for code, zp in self.zone_panels.items():
             cfg = self.plant.configs[code]
             zp.lbl_old_ip.configure(text=cfg.source_ip)
+            zp.lbl_old_ip2.configure(text=cfg.source_ip2 or "-")
             zp.lbl_new_ip.configure(text=cfg.target_ip)
-            if cfg.source_manual:
-                zp.lbl_source.configure(text=f"수동 > {cfg.manual_rpm} RPM")
-            else:
-                zp.lbl_source.configure(text=f"{get_house_name(cfg.source_line)} > {cfg.source_id}")
 
     def update_network_status(self) -> None:
         """통신상태 점 색상 갱신 (운영 Update_Network_Status)"""
         for code, zp in self.zone_panels.items():
             h = self.plant.houses[code]
+            has2 = bool(self.plant.configs[code].source_ip2)
             if h.running:
-                zp.rec_SOURCE_NETSTATUS.set_color(T.NET_OK if h.source_net_status else T.NET_ERR)
+                zp.rec_SOURCE_NETSTATUS.set_color(T.NET_OK if h.gw_net_status(1) else T.NET_ERR)
+                zp.rec_SOURCE2_NETSTATUS.set_color(
+                    (T.NET_OK if h.gw_net_status(2) else T.NET_ERR) if has2 else T.NET_STOP)
                 zp.rec_TARGET_NETSTATUS.set_color(T.NET_OK if h.target_net_status else T.NET_ERR)
-                zp.rec_SID_NETSTATUS.set_color(T.NET_OK if self.plant.reference_ok(code) else T.NET_ERR)
             else:
-                for d in (zp.rec_SOURCE_NETSTATUS, zp.rec_TARGET_NETSTATUS, zp.rec_SID_NETSTATUS):
+                for d in (zp.rec_SOURCE_NETSTATUS, zp.rec_SOURCE2_NETSTATUS, zp.rec_TARGET_NETSTATUS):
                     d.set_color(T.NET_STOP)
 
     # ------------------------------------------------------------ 종료

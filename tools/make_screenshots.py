@@ -41,11 +41,22 @@ ZONES = {
     "H1R7": ([(155, 770), (159, 769)], [1, 2, 3, 4, 8, 10, 11, 12, 13]),
     "H1R8": ([(211, 769), (217, 770)], [1, 3, 4, 6, 7, 8]),
 }
-REF = {"H1R1": ("H1R1", 2), "H1R2": ("H1R2", 66), "H1R3": ("H1R1", 2), "H1R4": ("H1R2", 66),
-       "H1R5": ("H1R5", 126), "H1R6": ("H1R6", 193), "H1R7": ("H1R7", 155), "H1R8": ("H1R8", 211)}
 LIMITS = {("H1R3", 13): 500, ("H1R4", 12): 450, ("H1R5", 4): 400, ("H1R7", 11): 400}
+# 2.7.0: 속도 지정은 모터마다. 현장처럼 수동 770 RPM, 2구역 신규모터만 2구역 기존모터 66 참조 (목록의 '수동'/'참조' 예시)
+REF_ZONE = {"H1R2": ("H1R2", 1, 66)}
+MON_ONLY = {("H1R3", 8)}                               # 모니터링만 예시 ('감시')
+# 기존모터 IP 2 예시: 5구역에 두 번째 기존모터 통신장치 (시뮬레이터는 127.0.0.2 에 같은 PORT 로 띄움)
+OLD2 = {"H1R5": [(140, 770), (141, 0)]}                 # 141 = 멈춘 팬 (회전수 0 -> 붉은 행)
 
 old_gw, new_gw = {}, {}
+
+
+def add_old_ecblue(gw, mid, rpm):
+    """기존모터 = 아날로그로 도는 ECblue. 통신 끊김 시 자동 운전은 대부분 켜져 있고, 5구역 126 만 꺼져 있어
+    프로그램이 켬 (에러 로그의 '자동 운전 설정함' 예시)."""
+    gw.add_ecblue(mid, analog_rpm=rpm)
+    if mid != 126:
+        gw.ecb[mid]["h"][5], gw.ecb[mid]["h"][17] = C.WD_SPEED, C.WD_VALUE
 MONITORING = os.environ.get("MONITORING") == "1"
 plant = Plant(cfg_path, monitoring=MONITORING)
 plant.load()
@@ -54,27 +65,41 @@ for code, (olds, news) in ZONES.items():
     old_gw[code], new_gw[code] = og, ng
     h = plant.houses[code]
     for mid, rpm in olds:
-        og.add_old(mid, rpm)
+        add_old_ecblue(og, mid, rpm)
         h.add_motor(mid, MotorType.OLD_MOTOR, True)
     for mid in news:
-        ng.add_new(mid)
+        if (code, mid) in MON_ONLY:
+            ng.add_new(mid, automanual=1, startstop=1, rpm=760)      # 모니터링만: 다른 곳에서 돌리는 팬
+        else:
+            ng.add_new(mid)
         lim = LIMITS.get((code, mid))
-        h.add_motor(mid, MotorType.NEW_MOTOR, True, lim is not None, lim or 0)
-    line, sid = REF[code]
-    # 현장 설정(2.6.0)처럼 구역은 수동 770 RPM, 2구역만 기존모터 66 참조 (목록의 '수동'/'참조' 표시 예시)
+        ref = REF_ZONE.get(code)
+        h.add_motor(mid, MotorType.NEW_MOTOR, True, lim is not None, lim or 0, set_rpm=770,
+                    ctrl_mode=C.CTRL_MODE_REF if ref else C.CTRL_MODE_MANUAL,
+                    ref_line=ref[0] if ref else "", ref_gw=ref[1] if ref else 1, ref_id=ref[2] if ref else 0,
+                    mon_only=(code, mid) in MON_ONLY)
+    ip2 = ""
+    if code in OLD2:
+        g2 = FakeGateway("127.0.0.2", og.port).start()
+        old_gw[code + "_2"] = g2
+        ip2 = g2.host
+        for mid, rpm in OLD2[code]:
+            add_old_ecblue(g2, mid, rpm)
+            h.add_motor(mid, MotorType.OLD_MOTOR, True, gw=2)
     plant.configs[code] = plant.configs[code].copy(
-        source_ip=og.host, source_port=og.port, target_ip=ng.host, target_port=ng.port,
-        source_manual=code != "H1R2", manual_rpm=770, source_line=line, source_id=sid)
+        source_ip=og.host, source_port=og.port, source_ip2=ip2, target_ip=ng.host, target_port=ng.port)
 plant.houses["H1R8"].add_motor(9, MotorType.NEW_MOTOR, False)     # 중지 예시
 # 기존모터제어 예시: 1구역 ECblue 10번은 700 RPM 수동 지정,
-# 2구역 ECblue 12번은 구역 참조(2구역 신규모터가 따르는 2구역 기존모터 66 의 값을 1100 대비 % 로 같은 비율)
+# 2구역 ECblue 12번은 2구역 기존모터 66 참조 (그 값을 1100 대비 % 로 같은 비율)
 # (시뮬레이터는 PC 안에서 여러 개를 띄우려고 임의 PORT 를 씀. 화면에는 PORT 가 나오지 않음)
 old_gw["H1R1"].add_ecblue(10, analog_rpm=0)
+old_gw["H1R1"].ecb[10]["h"][5], old_gw["H1R1"].ecb[10]["h"][17] = C.WD_SPEED, C.WD_VALUE
 plant.houses["H1R1"].add_motor(10, MotorType.OLD_CTRL, True, ip=old_gw["H1R1"].host,
                                port=old_gw["H1R1"].port, set_rpm=700)
 old_gw["H1R2"].add_ecblue(12, analog_rpm=0)
+old_gw["H1R2"].ecb[12]["h"][5], old_gw["H1R2"].ecb[12]["h"][17] = C.WD_SPEED, C.WD_VALUE
 plant.houses["H1R2"].add_motor(12, MotorType.OLD_CTRL, True, ip=old_gw["H1R2"].host, port=old_gw["H1R2"].port,
-                               ctrl_mode=C.CTRL_MODE_REF)
+                               ctrl_mode=C.CTRL_MODE_REF, ref_line="H1R2", ref_id=66)
 plant.save()
 # 에러 로그 예시 (지난 기록)
 plant.errors.error("6구역", "신규모터 통신장치", "192.168.0.12 접속 실패 (10초마다 재시도)")
@@ -142,7 +167,7 @@ def main_shot():
     snap("main_running")
     zp = win.zone_panels["H1R1"]
     items = [("1", zp.StopBtn), ("2", zp), ("3", zp.rec_SOURCE_NETSTATUS.master),
-             ("4", zp.rec_TARGET_NETSTATUS.master), ("5", zp.rec_SID_NETSTATUS.master),
+             ("4", zp.rec_SOURCE2_NETSTATUS.master), ("5", zp.rec_TARGET_NETSTATUS.master),
              ("6", zp.Btn_Settings), ("7", zp.Btn_Add), ("8", zp.LV.header), ("9", zp.LV.canvas), ("10", win.BtnMode),
              ("11", win.BtnErrors), ("12", win.BtnImport)]
     MARKS["main_running"] = [(n, bbox(w)) for n, w in items]
@@ -150,25 +175,16 @@ def main_shot():
 
 
 def line_dialog():
-    d = dialogs.LineSettingsDialog(root, plant, "H1R3", on_saved=win.update_header_box)
+    d = dialogs.LineSettingsDialog(root, plant, "H1R5", on_saved=win.update_header_box)
 
     def step():
-        crop_dialog("dlg_line_ref", d)
+        crop_dialog("dlg_line", d)
         ox, oy = d.winfo_rootx(), d.winfo_rooty()
-        MARKS["dlg_line_ref"] = [(n, bbox(w, ox, oy)) for n, w in [
-            ("1", d.header), ("2", d.lbl_house), ("3", d.txtSIP.master), ("4", d.txtTIP.master),
-            ("5", d.rb_source_manual), ("6", d.rb_source_ref), ("7", d.cb_lines), ("8", d.cb_ids),
-            ("9", d.BtnSave), ("10", d.BtnCancel)]]
-        d.source_mode.set("manual")
-        d._on_mode()
-
-        def manual():
-            crop_dialog("dlg_line_manual", d)
-            MARKS["dlg_line_manual"] = [(n, bbox(w, d.winfo_rootx(), d.winfo_rooty()))
-                                        for n, w in [("11", d.txtMRPM.master), ("12", d.lbl_rpm_range)]]
-            d.destroy()
-            root.after(100, motor_add)
-        root.after(200, manual)
+        MARKS["dlg_line"] = [(n, bbox(w, ox, oy)) for n, w in [
+            ("1", d.header), ("2", d.lbl_house), ("3", d.txtSIP.master), ("4", d.txtSIP2.master),
+            ("5", d.txtTIP.master), ("6", d.lbl_note), ("7", d.BtnSave), ("8", d.BtnCancel)]]
+        d.destroy()
+        root.after(100, motor_add)
     root.after(500, step)
     d.show_modal()
 
@@ -184,7 +200,24 @@ def motor_add():
         MARKS["dlg_motor_add"] = [(n, bbox(w, ox, oy)) for n, w in [
             ("1", d.header), ("2", d.lbl_house), ("3", d.rb_oldmotor), ("4", d.rb_newmotor), ("5", d.txtID.master),
             ("6", d.rb_use), ("7", d.rb_nouse), ("8", d.cbUSELIMIT), ("9", d.txtLIMITRPM.master),
-            ("10", d.BtnSave), ("11", d.BtnCancel)]]
+            ("10", d.BtnSave), ("11", d.BtnCancel), ("21", d.rb_ctrl_manual), ("22", d.txtSETRPM.master),
+            ("23", d.rb_ctrl_ref), ("24", d.cb_ref_line), ("25", d.cb_ref_motor), ("26", d.chk_mon)]]
+        d.destroy()
+        root.after(100, motor_add_old)
+    root.after(500, m)
+    d.show_modal()
+
+
+def motor_add_old():
+    d = dialogs.MotorDialog(root, plant, win.images, "H1R5", "ADD")
+    d.motor_type_var.set(0)
+    d._on_type()
+    d.cb_gw.current(1)
+
+    def m():
+        crop_dialog("dlg_motor_add_old", d)
+        ox, oy = d.winfo_rootx(), d.winfo_rooty()
+        MARKS["dlg_motor_add_old"] = [(n, bbox(w, ox, oy)) for n, w in [("27", d.cb_gw)]]
         d.destroy()
         root.after(100, motor_add_ctrl)
     root.after(500, m)
@@ -196,7 +229,11 @@ def motor_add_ctrl():
     d.motor_type_var.set(2)
     d._on_type()
     d.txtID.insert(0, "14")
-    d._show_set_pct()                     # 운전속도는 기본값 그대로 (수동 지정 770 RPM = 70%)
+    d.ctrl_mode_var.set(C.CTRL_MODE_REF)
+    d._select_ref_line("H1R2")
+    d._load_ref_motors("H1R2", (1, 66))
+    d._on_ctrl_mode()
+    d._show_ref_now()
 
     def m():
         crop_dialog("dlg_motor_add_ctrl", d)
