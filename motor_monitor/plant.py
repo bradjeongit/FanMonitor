@@ -13,10 +13,10 @@ from typing import Dict, List, Optional, Tuple
 
 from . import config as cfgmod
 from .config import LineConfig, MiniItem, MotorEntry
-from .constants import HOUSE_LINES, MotorStatus, MotorType
+from .constants import CTRL_MODE_REF, HOUSE_LINES, MotorStatus, MotorType
 from .errorlog import ErrorLog
 from .helpers import get_house_name
-from .house import HouseLine, motor_key
+from .house import HouseLine, Motor, motor_key
 
 log = logging.getLogger(__name__)
 
@@ -34,10 +34,9 @@ class ConfigImport:
             c = self.configs[s]
             ms = self.motors.get(s, [])
             cnt = {t: sum(1 for m in ms if m.mtype == t) for t in MotorType}
-            src = (f"수동 {c.manual_rpm} RPM" if c.source_manual
-                   else f"{get_house_name(c.source_line) or c.source_line} 기존모터 {c.source_id}")
-            out.append(f"{get_house_name(s)}: 기존 {c.source_ip} / 신규 {c.target_ip}"
-                       f" / {src} / 기존모터 {cnt[MotorType.OLD_MOTOR]}, 신규모터 {cnt[MotorType.NEW_MOTOR]}, "
+            old = c.source_ip + (f", {c.source_ip2}" if c.source_ip2 else "")
+            out.append(f"{get_house_name(s)}: 기존 {old} / 신규 {c.target_ip}"
+                       f" / 기존모터 {cnt[MotorType.OLD_MOTOR]}, 신규모터 {cnt[MotorType.NEW_MOTOR]}, "
                        f"기존모터제어 {cnt[MotorType.OLD_CTRL]}")
         return out
 
@@ -106,28 +105,43 @@ class Plant:
     def set_line_config(self, code: str, cfg: LineConfig) -> None:
         self.configs[code] = cfg
         self.save()
-        self.kick_all()                       # 수동 RPM·참조 변경을 바로 반영 (다른 구역의 구역 참조에도 영향)
+        self.kick_all()                       # IP 변경을 바로 반영
 
     # ------------------------------------------------------------- 조회
-    def find_reference_users(self, line_code: str, motor_id: int) -> List[str]:
-        """해당 기존모터를 참조 RPM 소스로 쓰는 구역 목록 (삭제 전 확인용)."""
-        return [
-            s for s in HOUSE_LINES
-            if not self.configs[s].source_manual
-            and self.configs[s].source_line == line_code
-            and self.configs[s].source_id == motor_id
-        ]
+    def find_reference_users(self, line_code: str, motor_id: int, gw: int = 1) -> List[str]:
+        """해당 기존모터를 참조 속도로 쓰는 모터 목록 (예: '3구역 신규모터 ID 5') - 삭제 전 확인용."""
+        out = []
+        for s in HOUSE_LINES:
+            for m in self.houses[s].get_list():
+                if (m.mtype != MotorType.OLD_MOTOR and m.ctrl_mode == CTRL_MODE_REF and m.ref_line == line_code
+                        and m.ref_gw == gw and m.ref_id == motor_id):
+                    out.append(f"{get_house_name(s)} {m.label}")
+        return out
 
-    def reference_ok(self, code: str) -> bool:
-        """RPM 소스 상태 점: 수동이면 정상, 참조이면 참조 모터가 '정상'일 때만 정상."""
-        cfg = self.configs[code]
-        if cfg.source_manual:
+    def reference_ok(self, code: str, m: Motor) -> bool:
+        """모터의 속도 출처 상태: 수동이면 정상, 참조이면 참조 모터가 '정상'일 때만 정상."""
+        if m.ctrl_mode != CTRL_MODE_REF:
             return True
-        src = self.houses.get(cfg.source_line)
-        if src is None:
-            return False
-        m = src.get_motor(motor_key(MotorType.OLD_MOTOR, cfg.source_id))
-        return m is not None and m.status == MotorStatus.OK
+        sm = self.houses[code].reference_motor(m)
+        return sm is not None and sm.status == MotorStatus.OK
+
+    def motor_endpoint(self, line: str, gw: int, mid: int) -> Optional[Tuple[str, int, int]]:
+        """기존모터(구역, 통신장치 번호, ID)의 (통신장치 IP, PORT, ID). 없으면 None.
+        기존모터제어의 참조가 자기 자신을 따라가지 않도록 확인할 때 씀."""
+        cfg = self.configs.get(line)
+        if cfg is None or not cfg.gw_ip(gw):
+            return None
+        return cfg.gw_ip(gw), cfg.source_port, mid
+
+    def find_old_gateway(self, ip: str) -> Optional[Tuple[str, int]]:
+        """기존모터 통신장치 IP -> (구역, 통신장치 번호). 없으면 None."""
+        for s in HOUSE_LINES:
+            c = self.configs[s]
+            if c.source_ip == ip:
+                return s, 1
+            if c.source_ip2 and c.source_ip2 == ip:
+                return s, 2
+        return None
 
     # ------------------------------------------------------------- 제어
     def start_line(self, code: str) -> None:
@@ -193,6 +207,13 @@ class Plant:
         added, skipped = [], []
         for it in items:
             e = cfgmod.mini_item_to_entry(it)
+            if e.ctrl_mode == CTRL_MODE_REF:
+                # 미니 제어기의 참조팬(IP·ID)이 어느 구역의 기존모터인지 찾아 참조로 지정 (못 찾으면 예전 구역 참조값)
+                found = self.find_old_gateway(it.ref_ip)
+                if found is not None:
+                    e = e._replace(ref_line=found[0], ref_gw=found[1], ref_id=it.ref_uid)
+                else:
+                    e = cfgmod.migrate_entry(e, self.configs[code])
             name = f"{it.ip} ID {it.uid}"
             if h.get_motor(motor_key(e.mtype, e.id, e.ip, e.port)) is not None:
                 skipped.append(f"{name} (이미 있음)")
@@ -204,17 +225,6 @@ class Plant:
         return added, skipped
 
     def zone_for_ip(self, ip: str) -> Optional[str]:
-        """기존모터 통신장치 IP 가 같은 구역 (없으면 None)."""
-        for s in HOUSE_LINES:
-            if self.configs[s].source_ip == ip:
-                return s
-        return None
-
-    def reference_endpoint(self, code: str) -> Optional[Tuple[str, int, int]]:
-        """구역 code 의 신규모터가 참조하는 기존모터의 (통신장치 IP, PORT, ID). 수동 모드이거나 참조가 없으면 None.
-        기존모터제어 '구역 참조'가 자기 자신을 따라가지 않도록 확인할 때 씀."""
-        cfg = self.configs[code]
-        if not cfg.source_manual and cfg.source_line in self.configs:
-            src = self.configs[cfg.source_line]
-            return src.source_ip, src.source_port, cfg.source_id
-        return None
+        """기존모터 통신장치 IP(1 또는 2)가 같은 구역 (없으면 None)."""
+        found = self.find_old_gateway(ip)
+        return found[0] if found else None

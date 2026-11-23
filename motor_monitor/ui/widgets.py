@@ -6,7 +6,8 @@ import tkinter as tk
 from typing import Callable, Dict, List, Optional
 
 from ..constants import CTRL_MODE_REF, MotorStatus, MotorType, pct_text, rpm_to_pct, speed_within
-from ..house import Motor
+from ..helpers import get_house_name
+from ..house import Motor, ip_tail
 from . import theme as T
 
 
@@ -207,22 +208,25 @@ class DottedSeparator(tk.Canvas):
 class MotorListView(tk.Frame):
     """라인별 모터 목록 (원본 ListView + GridView).
 
-    열: [종류 그림 35px] [ID 60px] [상태: 상태그림 + 수동/참조 표시 + RPM/이상/중지/대기]
-    - 머리글 클릭: 정렬 (종류 / ID / 상태)
+    열: [종류 그림 28px] [IP 30px: 접속 IP 의 마지막 숫자] [ID 34px] [상태: 상태그림 + 수동/참조/감시 표시 + RPM/이상/중지/대기]
+    - 머리글 클릭: 정렬 (종류 / IP / ID / 상태)
     - 항목 더블클릭: 모터 수정/삭제 창
+    - 작동 안 하는 팬(통신 에러 또는 회전수 0)은 행 바탕을 붉게
     """
 
     HEADER_H = 25
     ROW_H = 26
-    COL0 = 32      # 운영 ListView_SizeChanged: 32 / 42 / 나머지
-    COL1 = 42
-    COLUMNS = ("", "ID", "상태")
-    SORT_KEYS = {"": "MTYPE", "ID": "ID", "상태": "STATUS"}
+    COL0 = 28      # 종류 그림 (운영 ListView_SizeChanged: 32 / 42 / 나머지 -> IP 열을 넣으며 줄임)
+    COL_IP = 30    # IP 마지막 숫자
+    COL1 = 34      # ID
+    COLUMNS = ("", "IP", "ID", "상태")
+    SORT_KEYS = {"": "MTYPE", "IP": "IP", "ID": "ID", "상태": "STATUS"}
     STATUS_ICON_W = 22
-    # 속도 지정 방식 표시 (상태 그림과 숫자 사이): 수동 / 참조(자동으로 참조값을 따름)
-    SRC_BADGES = {"manual": ("수동", T.SRC_MANUAL_FG, T.SRC_MANUAL_BG), "ref": ("참조", T.SRC_REF_FG, T.SRC_REF_BG)}
-    BADGE_X = 6            # 상태 그림 오른쪽 여백
-    BADGE_W, BADGE_H = 28, 15
+    # 속도 지정 방식 표시 (상태 그림과 숫자 사이): 수동 / 참조(자동으로 참조값을 따름) / 감시(모니터링만)
+    SRC_BADGES = {"manual": ("수동", T.SRC_MANUAL_FG, T.SRC_MANUAL_BG), "ref": ("참조", T.SRC_REF_FG, T.SRC_REF_BG),
+                  "mon": ("감시", T.SRC_MON_FG, T.SRC_MON_BG)}
+    BADGE_X = 3            # 상태 그림 오른쪽 여백
+    BADGE_W, BADGE_H = 26, 15
     # 속도 변경을 보내면 1초 동안 팬 그림을 붉은 그림으로, 그 행 바탕을 붉게 (깜빡이지 않고 1초 동안 유지)
     SENT_SEC = 1.0
     _clock = staticmethod(time.monotonic)
@@ -242,6 +246,8 @@ class MotorListView(tk.Frame):
         if m.speed_note:
             return "bad_haderr", f"속도 미달\n{m.speed_note}" + speed
         if m.status == MotorStatus.OK:
+            if m.rpm == 0:
+                return "good", "정상 응답 - 회전수 0 (멈춤)" + speed
             return "good", "정상" + speed
         return None, ""
 
@@ -255,17 +261,28 @@ class MotorListView(tk.Frame):
         return f"\n설정 {m.target_rpm} · 지정 {cmd} · 실제 {m.rpm} RPM{ok}"
 
     @staticmethod
+    def ref_name(m: Motor) -> str:
+        """참조 기존모터 이름 (예: '2구역 기존모터 ID 66', 통신장치 2 면 '2구역 기존모터 2 ID 66')."""
+        if not m.ref_line:
+            return "참조 기존모터 없음"
+        return f"{get_house_name(m.ref_line) or m.ref_line} 기존모터{' 2' if m.ref_gw == 2 else ''} ID {m.ref_id}"
+
+    @staticmethod
     def type_icon(m: Motor):
         """종류 그림 이름과 툴팁 (운영 MotorTypeTemplate)."""
+        wd = f"\n{m.wd_desc}" if m.wd_desc else ""
         if m.mtype == MotorType.OLD_MOTOR:
-            return "oldmotor", "기존모터"
+            ip = f" {m.disp_ip}" if m.disp_ip else ""
+            return "oldmotor", f"기존모터{' (통신장치 2)' if m.gw == 2 else ''}{ip}" + wd
         if m.mtype == MotorType.OLD_CTRL:
-            if m.ctrl_mode == CTRL_MODE_REF:
-                src = f" {m.ref_desc}" if m.ref_desc else ""
+            if m.mon_only:
+                speed = "모니터링만 (제어 신호 안 보냄)"
+            elif m.ctrl_mode == CTRL_MODE_REF:
+                src = f" {m.ref_desc or MotorListView.ref_name(m)}"
                 now = ("값 없음" if m.ref_rpm is None
                        else f"{m.ref_rpm} RPM = {pct_text(rpm_to_pct(m.ref_rpm))}")
                 t = m.target_rpm if m.target_rpm is not None else m.ctrl_target
-                speed = (f"구역 참조{src} (지금 {now})"
+                speed = (f"참조{src} (지금 {now})"
                          + ("" if t is None else f" → 설정 {pct_text(rpm_to_pct(t))} = {t} RPM"))
             else:
                 speed = f"수동 지정 {m.set_rpm} RPM ({pct_text(rpm_to_pct(m.set_rpm))})"
@@ -276,10 +293,11 @@ class MotorListView(tk.Frame):
                 tip += f"\n모터 최고속도(h8) {m.max_rpm} RPM"
                 if m.target_rpm:
                     tip += f": 설정 {m.target_rpm} RPM = 최고속도의 {pct_text(m.target_rpm * 100 / m.max_rpm)}"
-            return "oldmotor_ctrl", tip + (f"\n{m.ctrl_note}" if m.ctrl_note else "")
+            return "oldmotor_ctrl", tip + (f"\n{m.ctrl_note}" if m.ctrl_note else "") + wd
+        ip = f" {m.disp_ip}" if m.disp_ip else ""
         if m.use_limit:
-            return "newmotor_limit", "신규모터(제한모드)"
-        return "newmotor", "신규모터"
+            return "newmotor_limit", f"신규모터(제한모드 최대 {m.limit_rpm} RPM){ip}"
+        return "newmotor", f"신규모터{ip}"
 
     def __init__(self, master, images: T.Images,
                  on_header_click: Callable[[str], None],
@@ -390,7 +408,7 @@ class MotorListView(tk.Frame):
     # --- 그리기 ---
     def _col_x(self):
         w = self._width
-        return 0, self.COL0, self.COL0 + self.COL1, w
+        return 0, self.COL0, self.COL0 + self.COL_IP, self.COL0 + self.COL_IP + self.COL1, w
 
     def _on_resize(self, e) -> None:
         # 원본 ListView_SizeChanged: 0열 35, 1열 60, 2열 = 나머지
@@ -413,7 +431,7 @@ class MotorListView(tk.Frame):
         h.delete("all")
         x = self._col_x()
         w = max(self._width, 1)
-        for i in range(3):
+        for i in range(len(self.COLUMNS)):
             x1, x2 = x[i], x[i + 1]
             if self._hover_hdr == i:
                 h.create_rectangle(x1, 0, x2, self.HEADER_H, fill=T.LIST_HEADER_HOVER, outline="")
@@ -441,13 +459,18 @@ class MotorListView(tk.Frame):
                 tname += "_red"
             self.drawn_icons.append(tname)
             c.create_image((x[0] + x[1]) // 2, cy, image=self.images.get(tname, 20))
-            c.create_text((x[1] + x[2]) // 2, cy, text=str(m.id), font=T.font(9))
-            self._draw_status(c, m, x[2], x[3], cy)
+            c.create_text((x[1] + x[2]) // 2, cy, text=ip_tail(m.disp_ip), font=T.font(9), fill=T.IP_FG,
+                          tags=("ip",))
+            c.create_text((x[2] + x[3]) // 2, cy, text=str(m.id), font=T.font(9))
+            self._draw_status(c, m, x[3], x[4], cy)
         c.configure(scrollregion=(0, 0, w, max(len(self._rows) * self.ROW_H, 1)))
 
     @staticmethod
     def row_fill(m: Motor, selected: bool, hover: bool) -> Optional[str]:
-        """행 바탕색. 문제 상태(이상표시·이상·속도 미달)인 행은 늘 붉은 음영 (선택·마우스오버는 더 진하게)."""
+        """행 바탕색. 작동 안 하는 팬(통신 에러·회전수 0)은 붉게, 그 밖의 문제 상태(제어 문제·속도 미달)는
+        붉은 음영 (선택·마우스오버는 더 진하게)."""
+        if m.not_running:
+            return T.LIST_DEAD_SELECTED if selected else (T.LIST_DEAD_HOVER if hover else T.LIST_DEAD_BG)
         if m.has_problem:
             return T.LIST_PROBLEM_SELECTED if selected else (T.LIST_PROBLEM_HOVER if hover else T.LIST_PROBLEM_BG)
         if selected:
@@ -463,17 +486,16 @@ class MotorListView(tk.Frame):
             return None
         return cls.SRC_BADGES.get(m.speed_src)
 
-    @staticmethod
-    def src_tip(m: Motor) -> str:
-        """수동/참조 표시 툴팁."""
+    @classmethod
+    def src_tip(cls, m: Motor) -> str:
+        """수동/참조/감시 표시 툴팁."""
+        if m.speed_src == "mon":
+            return "감시(모니터링만): 이 모터는 읽기만 하고 제어 신호를 보내지 않음 (전체 모드와 상관없이)"
         now = "" if m.target_rpm is None else f"\n지금 설정 {m.target_rpm} RPM ({pct_text(rpm_to_pct(m.target_rpm))})"
-        if m.mtype == MotorType.OLD_CTRL:
-            if m.speed_src == "ref":
-                return "참조(자동): 구역 참조 - 이 구역 신규모터가 따르는 값을 같은 비율로 따라 운전" + now
-            return f"수동: 수동 지정 {m.set_rpm} RPM ({pct_text(rpm_to_pct(m.set_rpm))})으로 운전"
         if m.speed_src == "ref":
-            return "참조(자동): 구역설정의 참조 기존모터 회전수를 따라 운전" + now
-        return "수동: 구역설정의 수동 RPM 으로 운전" + now
+            how = "같은 비율로 따라" if m.mtype == MotorType.OLD_CTRL else "따라"
+            return f"참조(자동): {cls.ref_name(m)} 회전수를 {how} 운전" + now
+        return f"수동: 지정 {m.set_rpm} RPM ({pct_text(rpm_to_pct(m.set_rpm))})으로 운전" + now
 
     def _draw_status(self, c: tk.Canvas, m: Motor, x1: int, x2: int, cy: int) -> None:
         """운영 StatusTemplate: 정상/이상은 RPM 숫자(이상은 빨강 굵게), 중지/대기는 연회색 굵은 글씨.
@@ -498,7 +520,7 @@ class MotorListView(tk.Frame):
             text, fg, bold = "중지", T.STATUS_DIM_FG, True
         else:
             text, fg, bold = "대기", T.STATUS_DIM_FG, True
-        c.create_text(x2 - 8, cy, text=text, anchor="e", fill=fg, font=T.font(9, bold=bold))
+        c.create_text(x2 - 5, cy, text=text, anchor="e", fill=fg, font=T.font(9, bold=bold))
 
     # --- 마우스 ---
     def _row_at(self, y: int) -> Optional[int]:
@@ -539,7 +561,7 @@ class MotorListView(tk.Frame):
 
     def _hdr_col(self, x: int) -> Optional[int]:
         xs = self._col_x()
-        for i in range(3):
+        for i in range(len(self.COLUMNS)):
             if xs[i] <= x < xs[i + 1]:
                 return i
         return None
@@ -564,11 +586,13 @@ class MotorListView(tk.Frame):
             xs = self._col_x()
             if xs[0] <= x < xs[1]:
                 return self.type_icon(m)[1]
-            if xs[2] <= x < xs[2] + self.STATUS_ICON_W + 2:
+            if xs[1] <= x < xs[2]:
+                return f"접속 IP {m.disp_ip}" if m.disp_ip else "접속 IP 없음"
+            if xs[3] <= x < xs[3] + self.STATUS_ICON_W + 2:
                 tip = self.status_icon(m)[1]
                 if tip:
                     return tip
-            bx = xs[2] + self.STATUS_ICON_W + self.BADGE_X
+            bx = xs[3] + self.STATUS_ICON_W + self.BADGE_X
             if bx <= x < bx + self.BADGE_W and self.src_badge(m):
                 return self.src_tip(m)
         return "항목 더블클릭시 수정/삭제"

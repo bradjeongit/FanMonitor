@@ -86,13 +86,13 @@ def test_ctrl_ref_config_roundtrip_and_old_format(tmp_path):
     assert cfgmod.parse_ctrl_list("3@:502=1=500,4@1.2.3.4:502=1=500=X") == []      # 형식 오류는 무시
 
 
-def test_reference_endpoint_follows_zone_reference(tmp_path):
+def test_motor_endpoint_of_reference(tmp_path):
     p = _plant(tmp_path)
-    p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip="172.27.0.84")
-    p.configs["H1R3"] = p.configs["H1R3"].copy(source_manual=False, source_line="H1R1", source_id=155)
-    assert p.reference_endpoint("H1R3") == ("172.27.0.84", 502, 155)      # 신규모터가 참조하는 기존모터
-    p.configs["H1R4"] = p.configs["H1R4"].copy(source_manual=True)
-    assert p.reference_endpoint("H1R4") is None                           # 수동: 참조 기존모터 없음
+    p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip="172.27.0.84", source_ip2="172.27.0.85")
+    assert p.motor_endpoint("H1R1", 1, 155) == ("172.27.0.84", 502, 155)       # 기존모터 IP 1 의 155
+    assert p.motor_endpoint("H1R1", 2, 7) == ("172.27.0.85", 502, 7)           # 기존모터 IP 2 의 7
+    p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip2="")
+    assert p.motor_endpoint("H1R1", 2, 7) is None and p.motor_endpoint("", 1, 7) is None
 
 
 def test_percent_conversion():
@@ -103,15 +103,14 @@ def test_percent_conversion():
 
 
 def test_ctrl_zone_ref_target_rules(tmp_path):
-    """구역 참조값 -> 1100 대비 % -> 같은 비율. 값이 없으면 이전 값 유지(60초 넘으면 이상표시),
+    """참조 기존모터 값 -> 1100 대비 % -> 같은 비율. 값이 없으면 이전 값 유지(60초 넘으면 이상표시),
     자기 자신이면 따라가지 않음."""
     p = _plant(tmp_path)
     p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip="172.27.0.84")
-    p.configs["H1R2"] = p.configs["H1R2"].copy(source_manual=False, source_line="H1R1", source_id=155)
     src = p.houses["H1R1"]
     src.add_motor(155, MotorType.OLD_MOTOR, True)
     h = p.houses["H1R2"]
-    h.add_motor(2, MotorType.OLD_CTRL, True, ip="172.27.0.95", ctrl_mode=CTRL_MODE_REF)
+    h.add_motor(2, MotorType.OLD_CTRL, True, ip="172.27.0.95", ctrl_mode=CTRL_MODE_REF, ref_line="H1R1", ref_id=155)
     key = "2_2@172.27.0.95:502"
     now = [1000.0]
     h._clock = lambda: now[0]
@@ -122,11 +121,11 @@ def test_ctrl_zone_ref_target_rules(tmp_path):
     assert target() == (None, "")
     now[0] += 1                                                             # 60초 넘게 값 없음 -> 이상표시
     t, note = target()
-    assert t is None and "속도를 지정하지 않음" in note and "1구역 기존모터 155" in note
+    assert t is None and "속도를 지정하지 않음" in note and "1구역 기존모터 ID 155" in note
     src._mark_received(src._motors["0_155"], 770)
     assert target() == (770, "")                                            # 770 = 70% -> 1100 x 70%
     m = h.get_motor(key)
-    assert (m.ref_rpm, m.ctrl_target, m.ref_desc) == (770, 770, "1구역 기존모터 155")
+    assert (m.ref_rpm, m.ctrl_target, m.ref_desc) == (770, 770, "1구역 기존모터 ID 155")
     src._motors["0_155"].rpm = 1500
     assert target() == (1100, "")                                           # 100% 넘으면 100%
     src._motors["0_155"].status = MotorStatus.ERR                           # 참조 기존모터 이상 -> 이전 값 유지
@@ -134,21 +133,19 @@ def test_ctrl_zone_ref_target_rules(tmp_path):
     now[0] += C.NO_RESPONSE_WARN_SEC
     t, note = target()
     assert t == 1100 and "이전 지정 100% (1100 RPM) 유지" in note
-    # 구역설정이 수동이면 그 수동 RPM 을 같은 비율로
-    p.configs["H1R2"] = p.configs["H1R2"].copy(source_manual=True, manual_rpm=600)
-    assert target() == (600, "") and h.get_motor(key).ref_desc == "구역 수동 600 RPM"
     # 참조 기존모터가 이 모터 자신 (같은 통신장치·ID) -> 따라가지 않음
-    p.configs["H1R2"] = p.configs["H1R2"].copy(source_manual=False, source_line="H1R2", source_id=2,
-                                               source_ip="172.27.0.95")
+    p.configs["H1R2"] = p.configs["H1R2"].copy(source_ip="172.27.0.95")
+    h.add_motor(2, MotorType.OLD_MOTOR, True)
+    h.mod_motor(key, True, ref=("H1R2", 1, 2))
     t, note = target()
-    assert t == 600 and "자신" in note
+    assert t is None and "자신" in note
     # 수동 지정은 그대로
     h.mod_motor(key, True, set_rpm=450, ctrl_mode=CTRL_MODE_MANUAL)
     assert target() == (450, "")
 
 
 def test_ctrl_ref_follows_zone_reference(tmp_path, fast, monkeypatch):
-    """구역 참조: 신규모터가 참조하는 기존모터 값(1구역 기존모터 7)을 1100 대비 % 로 같은 비율로 지정.
+    """참조: 모터에 지정한 참조 기존모터 값(1구역 기존모터 7)을 1100 대비 % 로 같은 비율로 지정.
     시작 직후 참조값을 읽기 전에는 에러 없이 기다림. 참조값이 없어지면 이전 속도 유지(이상표시·에러 기록),
     돌아오면 해제."""
     old = FakeGateway().start()                       # 1구역 기존모터 통신장치 (참조 기존모터 7)
@@ -158,30 +155,30 @@ def test_ctrl_ref_follows_zone_reference(tmp_path, fast, monkeypatch):
     try:
         p = _plant(tmp_path)
         p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip=old.host, source_port=old.port, target_ip=old.host,
-                                                   target_port=old.port, source_manual=False, source_line="H1R1",
-                                                   source_id=7)
+                                                   target_port=old.port)
         h = p.houses["H1R1"]
         h.add_motor(7, MotorType.OLD_MOTOR, True)
-        h.add_motor(2, MotorType.OLD_CTRL, True, ip=tgt.host, port=tgt.port, ctrl_mode=CTRL_MODE_REF)
+        h.add_motor(2, MotorType.OLD_CTRL, True, ip=tgt.host, port=tgt.port, ctrl_mode=CTRL_MODE_REF,
+                    ref_line="H1R1", ref_id=7)
         key = f"2_2@{tgt.host}:{tgt.port}"
         p.start_line("H1R1")
         assert _wait(lambda: tgt.ecb_speed(2) == 770)                    # 770 = 70% -> 770 RPM
         assert _wait(lambda: h.get_motor(key).ref_rpm == 770 and h.get_motor(key).ctrl_target == 770)
-        assert not any("구역 참조값" in e.message for e in p.errors.recent())  # 시작 직후 잘못된 에러 없음
+        assert not any("참조값" in e.message for e in p.errors.recent())  # 시작 직후 잘못된 에러 없음
         monkeypatch.setattr(C, "NO_RESPONSE_WARN_SEC", 1)                 # 아래 '값 없음' 확인을 빨리
         old.old_rpm[7] = 880
         assert _wait(lambda: tgt.ecb_speed(2) == 880)
         old.old_rpm[7] = 1500                         # 100% 넘음 -> 1100
         assert _wait(lambda: tgt.ecb[2]["h"][2] == 1100)
-        # 구역 참조값이 없어짐 (구역설정의 참조기존모터를 없는 모터로) -> 이전 속도 유지, 이상표시, 에러 기록
-        p.configs["H1R1"] = p.configs["H1R1"].copy(source_id=99)
-        assert _wait(lambda: "구역 참조값" in h.get_motor(key).ctrl_note)
+        # 참조값이 없어짐 (참조 기존모터를 없는 모터로) -> 이전 속도 유지, 이상표시, 에러 기록
+        h.mod_motor(key, True, ref=("H1R1", 1, 99))
+        assert _wait(lambda: "참조값" in h.get_motor(key).ctrl_note)
         m = h.get_motor(key)
-        assert m.had_err and "이전 지정 100% (1100 RPM) 유지" in m.ctrl_note and tgt.ecb[2]["h"][2] == 1100
-        assert any("구역 참조값" in e.message and e.level == "에러" for e in p.errors.recent())
+        assert m.had_err and "속도를 지정하지 않음" in m.ctrl_note and tgt.ecb[2]["h"][2] == 1100
+        assert any("참조값" in e.message and e.level == "에러" for e in p.errors.recent())
         # 다시 참조 -> 따라가고 이상표시 해제
         old.old_rpm[7] = 550
-        p.configs["H1R1"] = p.configs["H1R1"].copy(source_id=7)
+        h.mod_motor(key, True, ref=("H1R1", 1, 7))
         assert _wait(lambda: tgt.ecb_speed(2) == 550)
         assert _wait(lambda: not h.get_motor(key).had_err and h.get_motor(key).ctrl_note == "")
         h.service_stop(join=True)
@@ -198,16 +195,17 @@ def test_ctrl_ref_without_any_reading_does_not_write_speed(tmp_path, fast, monke
     try:
         p = _plant(tmp_path)
         p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip=gw.host, source_port=gw.port, target_ip=gw.host,
-                                                   target_port=gw.port, source_manual=False, source_line="H1R1",
-                                                   source_id=99)
+                                                   target_port=gw.port)
         h = p.houses["H1R1"]
         h.add_motor(99, MotorType.OLD_MOTOR, True)    # 응답하지 않는 참조 기존모터
-        h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, ctrl_mode=CTRL_MODE_REF)
+        h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, ctrl_mode=CTRL_MODE_REF,
+                    ref_line="H1R1", ref_id=99)
         key = f"2_2@{gw.host}:{gw.port}"
         p.start_line("H1R1")
         assert _wait(lambda: "속도를 지정하지 않음" in h.get_motor(key).ctrl_note)
         time.sleep(0.3)
         assert gw.ecb[2]["h"][2] == 333 and not any(w[1] == 2 for w in gw.writes)
+        assert {w[1] for w in gw.writes} <= {0, 4, 5, 17}           # 자동 운전 설정(h0·h5·h17)·제어모드 말고는 안 씀
         h.service_stop(join=True)
     finally:
         gw.stop()
@@ -222,12 +220,13 @@ def test_monitoring_mode_never_writes_including_ref_mode(tmp_path, fast):
     try:
         p = _plant(tmp_path, monitoring=True)
         p.configs["H1R1"] = p.configs["H1R1"].copy(source_ip=gw.host, source_port=gw.port, target_ip=gw.host,
-                                                   target_port=gw.port, source_manual=False, source_line="H1R1",
-                                                   source_id=7)
+                                                   target_port=gw.port)
         h = p.houses["H1R1"]
         h.add_motor(7, MotorType.OLD_MOTOR, True)
-        h.add_motor(5, MotorType.NEW_MOTOR, True)
-        h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, ctrl_mode=CTRL_MODE_REF)
+        h.add_motor(5, MotorType.NEW_MOTOR, True, ctrl_mode=CTRL_MODE_REF, ref_line="H1R1", ref_id=7)
+        h.add_motor(2, MotorType.OLD_CTRL, True, ip=gw.host, port=gw.port, ctrl_mode=CTRL_MODE_REF,
+                    ref_line="H1R1", ref_id=7)
+        gw.ecb[2]["h"][5], gw.ecb[2]["h"][17] = 700, (240 << 8) | 2   # 자동 운전은 이미 켜져 있음 -> 쓰기 없음
         p.start_line("H1R1")
         key = f"2_2@{gw.host}:{gw.port}"
         assert _wait(lambda: h.get_motor(key).ref_rpm == 770 and h.get_motor("1_5").status == MotorStatus.OK)
@@ -404,14 +403,16 @@ def test_import_mini_items(tmp_path):
     assert items[0].rpm == 550
     p = _plant(tmp_path)
     p.configs["H1R3"] = p.configs["H1R3"].copy(source_ip="172.27.0.116")
-    assert p.zone_for_ip("172.27.0.116") == "H1R3"
+    p.configs["H1R5"] = p.configs["H1R5"].copy(source_ip="172.27.0.90", source_ip2="172.27.0.95")
+    assert p.zone_for_ip("172.27.0.116") == "H1R3" and p.zone_for_ip("172.27.0.95") == "H1R5"
     added, skipped = p.import_mini_items(items, "H1R3")
     assert len(added) == 2 and skipped == []
     h = p.houses["H1R3"]
     m3 = h.get_motor("2_3@172.27.0.116:502")
     m4 = h.get_motor("2_4@172.27.0.116:502")
     assert m3.ctrl_mode == CTRL_MODE_MANUAL and m3.set_rpm == 550
-    assert m4.ctrl_mode == CTRL_MODE_REF and m4.port == 502                  # 참조팬 -> 구역 참조
+    # 참조팬(172.27.0.95 ID 180) -> 5구역 기존모터 IP 2 의 ID 180 참조
+    assert (m4.ctrl_mode, m4.ref_line, m4.ref_gw, m4.ref_id, m4.port) == (CTRL_MODE_REF, "H1R5", 2, 180, 502)
     added, skipped = p.import_mini_items(items, "H1R3")                    # 같은 항목은 건너뜀
     assert added == [] and len(skipped) == 2
     bad = tmp_path / "bad.json"
@@ -481,26 +482,29 @@ def test_ui_icons_colors(ui):
 def test_ui_ctrl_ref_mode_dialog(ui):
     win, plant, dialogs, tools, msgs = ui
     plant.configs["H1R1"] = plant.configs["H1R1"].copy(source_ip="172.27.0.84")
-    plant.configs["H1R2"] = plant.configs["H1R2"].copy(source_ip="172.27.0.95", source_manual=False,
-                                                       source_line="H1R1", source_id=155)
+    plant.configs["H1R2"] = plant.configs["H1R2"].copy(source_ip="172.27.0.95")
     src = plant.houses["H1R1"]
     src.add_motor(155, MotorType.OLD_MOTOR, True)
     zp = win.zone_panels["H1R2"]
     d = dialogs.MotorDialog(win.root, plant, win.images, "H1R2", "ADD", on_changed=zp.refresh)
     d.motor_type_var.set(2); d._on_type()
-    # 참조 IP/PORT/ID 입력칸 없이, 이 구역 신규모터가 따르는 값(1구역 기존모터 155)을 보여줌
+    # 참조 IP/PORT/ID 입력칸 없이, 참조 기존모터를 구역 > ID 로 고름
     for name in ("txtCPORT", "txtRIP", "txtRPORT", "txtRID", "BtnRefZone"):
         assert not hasattr(d, name)
-    assert d.lbl_zone_ref.cget("text").startswith("1구역 기존모터 155 → 지금 값 없음")
-    assert d.ctrl_mode_var.get() == CTRL_MODE_MANUAL and d.rb_ctrl_ref.cget("text") == "구역 참조"
+    assert d.ctrl_mode_var.get() == CTRL_MODE_MANUAL and d.rb_ctrl_ref.cget("text") == "참조"
+    d._select_ref_line("H1R1"); d._on_ref_line_changed()
+    d.cb_ref_motor.current(1); d._show_ref_now()
+    assert d.lbl_zone_ref.cget("text").startswith("지금 값 없음")
     d.destroy()
     src._mark_received(src._motors["0_155"], 770)
     d = dialogs.MotorDialog(win.root, plant, win.images, "H1R2", "ADD", on_changed=zp.refresh)
     d.motor_type_var.set(2); d._on_type()
-    assert d.lbl_zone_ref.cget("text") == "1구역 기존모터 155 → 지금 770 RPM = 70%"
+    d._select_ref_line("H1R1"); d._on_ref_line_changed()
+    d.cb_ref_motor.current(1); d._show_ref_now()
+    assert d.lbl_zone_ref.cget("text") == "지금 770 RPM = 70%"
     d.ctrl_mode_var.set(CTRL_MODE_REF); d._on_ctrl_mode()
     assert str(d.txtSETRPM.cget("state")) == "disabled"
-    # 참조 기존모터 자신(1구역 통신장치 172.27.0.84 의 ID 155)은 구역 참조로 제어할 수 없음
+    # 참조 기존모터 자신(1구역 통신장치 172.27.0.84 의 ID 155)은 참조로 제어할 수 없음
     d.txtCIP.delete(0, "end"); d.txtCIP.insert(0, "172.27.0.84")
     d.txtID.insert(0, "155")
     d.on_save()
@@ -510,9 +514,9 @@ def test_ui_ctrl_ref_mode_dialog(ui):
     d.on_save()
     key = "2_176@172.27.0.95:502"
     m = plant.houses["H1R2"].get_motor(key)
-    assert m.ctrl_mode == CTRL_MODE_REF and m.port == 502
+    assert (m.ctrl_mode, m.ref_line, m.ref_id, m.port) == (CTRL_MODE_REF, "H1R1", 155, 502)
     from motor_monitor.ui.widgets import MotorListView
-    assert "운전속도: 구역 참조" in MotorListView.type_icon(m)[1]
+    assert "운전속도: 참조 1구역 기존모터 ID 155" in MotorListView.type_icon(m)[1]
     # 수정: 수동 지정으로 바꿈
     d = dialogs.MotorDialog(win.root, plant, win.images, "H1R2", "MOD", mod_dkey=key, on_changed=zp.refresh)
     assert d.ctrl_mode_var.get() == CTRL_MODE_REF and d.lbl_zone_ref.cget("text").endswith("= 70%")
@@ -568,7 +572,13 @@ def test_ui_import_mini_dialog(ui, tmp_path):
     d = tools.MiniImportDialog(win.root, plant, items, "mini_control.json", on_done=win.after_import)
     assert d.zone_code == "H1R4"                                 # IP 가 같은 구역을 먼저 선택
     specs = [d.tree.item(i, "values")[2] for i in d.tree.get_children()]
-    assert specs == ["수동 지정 550 RPM (50%)", "구역 참조 (미니 제어기 참조팬 172.27.0.95 ID 180 대신)"]
+    assert specs == ["수동 지정 550 RPM (50%)",
+                     "참조팬 172.27.0.95 ID 180: 등록된 기존모터 IP 가 아니라 구역의 예전 값으로"]
+    d.destroy()
+    plant.configs["H1R6"] = plant.configs["H1R6"].copy(source_ip2="172.27.0.95")   # 참조팬이 6구역 IP 2 에 있음
+    d = tools.MiniImportDialog(win.root, plant, items, "mini_control.json", on_done=win.after_import)
+    specs = [d.tree.item(i, "values")[2] for i in d.tree.get_children()]
+    assert specs[1] == "참조 6구역 기존모터 2 ID 180 (172.27.0.95)"
     d.on_import()
     keys = sorted(r.key for r in win.zone_panels["H1R4"].LV.rows)
     assert keys == ["2_3@172.27.0.116:502", "2_4@172.27.0.116:502"]

@@ -69,17 +69,23 @@ def test_ctrl_add_dialog_defaults_to_manual_70_percent(root, tmp_path, monkeypat
     assert (m.set_rpm, m.ctrl_mode, m.speed_src) == (770, CTRL_MODE_MANUAL, "manual")
 
 
-def test_zone_dialog_prefills_manual_770_only_when_unset(root, tmp_path):
+def test_new_motor_add_dialog_defaults_to_manual_770(root, tmp_path, monkeypatch):
+    """2.7.0: RPM 제어 소스는 모터마다 - 신규모터 추가 창의 기본값은 수동 770 RPM."""
     from motor_monitor.ui import dialogs
+    from motor_monitor.ui import theme as T
+    monkeypatch.setattr(dialogs.BaseDialog, "error", lambda self, m, t: None)
+    monkeypatch.setattr(dialogs.BaseDialog, "ask", lambda self, m, t: True)
     p = _plant(tmp_path)
-    p.configs["H1R1"] = p.configs["H1R1"].copy(source_manual=False, manual_rpm=0, source_line="H1R1", source_id=2)
-    p.configs["H1R2"] = p.configs["H1R2"].copy(source_manual=True, manual_rpm=0)     # 수동 0 = 일부러 멈춤
-    p.configs["H1R3"] = p.configs["H1R3"].copy(source_manual=False, manual_rpm=500, source_line="H1R1",
-                                               source_id=2)
-    for code, want in (("H1R1", "770"), ("H1R2", "0"), ("H1R3", "500")):
-        d = dialogs.LineSettingsDialog(root, p, code)
-        assert d.txtMRPM.get() == want, code
-        d.destroy()
+    d = dialogs.MotorDialog(root, p, T.Images(root), "H1R1", "ADD")
+    d.motor_type_var.set(int(MotorType.NEW_MOTOR))
+    d._on_type()
+    assert d.ctrl_mode_var.get() == CTRL_MODE_MANUAL and d.txtSETRPM.get() == "770"
+    d.txtID.insert(0, "4")
+    d.on_save()
+    m = p.houses["H1R1"].get_motor("1_4")
+    assert (m.ctrl_mode, m.set_rpm) == (CTRL_MODE_MANUAL, 770)
+    assert p.houses["H1R1"].add_motor(5, MotorType.NEW_MOTOR, True)
+    assert p.houses["H1R1"].get_motor("1_5").set_rpm == 770                # 코드로 추가해도 기본 770
 
 
 # ---------------------------------------------------------------- 4 신규모터 아이콘 개나리색
@@ -110,23 +116,30 @@ def test_new_motor_icons_have_no_orange_and_keep_red_L(root):
 # ---------------------------------------------------------------- 6 수동/참조 표시
 def test_speed_source_rules():
     new = Motor(1, MotorType.NEW_MOTOR, True)
-    assert (speed_source(new, True), speed_source(new, False), speed_source(new, None)) == ("manual", "ref", "")
+    assert speed_source(new) == "manual"
+    new.ctrl_mode = CTRL_MODE_REF
+    assert speed_source(new) == "ref"
+    new.mon_only = True
+    assert speed_source(new) == "mon"                                    # 모니터링만
     ctrl = Motor(2, MotorType.OLD_CTRL, True, ctrl_mode=CTRL_MODE_MANUAL)
-    assert speed_source(ctrl, False) == "manual"                         # 기존모터제어는 자기 운전속도 방식
+    assert speed_source(ctrl) == "manual"
     ctrl.ctrl_mode = CTRL_MODE_REF
-    assert speed_source(ctrl, True) == "ref"
-    assert speed_source(Motor(3, MotorType.OLD_MOTOR, True), True) == ""  # 기존모터(읽기만)는 표시 없음
+    assert speed_source(ctrl) == "ref"
+    assert speed_source(Motor(3, MotorType.OLD_MOTOR, True)) == ""        # 기존모터(읽기만)는 표시 없음
 
 
-def test_get_list_fills_speed_source_from_zone(tmp_path):
+def test_get_list_fills_speed_source_per_motor(tmp_path):
     p = _plant(tmp_path)
     h = p.houses["H1R1"]
     h.add_motor(2, MotorType.OLD_MOTOR, True)
     h.add_motor(5, MotorType.NEW_MOTOR, True)
+    h.add_motor(6, MotorType.NEW_MOTOR, True, ctrl_mode=CTRL_MODE_REF, ref_line="H1R1", ref_id=2)
     h.add_motor(9, MotorType.OLD_CTRL, True, ip="172.27.0.84", set_rpm=770, ctrl_mode=CTRL_MODE_REF)
-    assert {m.id: m.speed_src for m in h.get_list()} == {2: "", 5: "manual", 9: "ref"}
-    p.set_line_config("H1R1", p.configs["H1R1"].copy(source_manual=False, source_line="H1R1", source_id=2))
-    assert {m.id: m.speed_src for m in h.get_list()} == {2: "", 5: "ref", 9: "ref"}
+    assert {m.id: m.speed_src for m in h.get_list()} == {2: "", 5: "manual", 6: "ref", 9: "ref"}
+    h.mod_motor("1_5", True, mon_only=True)
+    assert {m.id: m.speed_src for m in h.get_list()}[5] == "mon"
+    assert {m.id: m.disp_ip for m in h.get_list()} == {2: "192.168.0.1", 5: "192.168.0.2", 6: "192.168.0.2",
+                                                        9: "172.27.0.84"}
 
 
 def _list_view(root):
@@ -146,16 +159,19 @@ def test_status_column_shows_manual_or_ref_between_icon_and_number(root):
     rows = [Motor(1, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, rpm=770, target_rpm=770, speed_src="manual"),
             Motor(2, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, rpm=768, target_rpm=769, speed_src="ref"),
             Motor(3, MotorType.OLD_CTRL, True, status=MotorStatus.OK, rpm=770, set_rpm=770, speed_src="manual"),
-            Motor(4, MotorType.OLD_CTRL, True, status=MotorStatus.READY, ctrl_mode=CTRL_MODE_REF, speed_src="ref"),
+            Motor(4, MotorType.OLD_CTRL, True, status=MotorStatus.READY, ctrl_mode=CTRL_MODE_REF, speed_src="ref",
+                  ref_line="H1R2", ref_id=66),
             Motor(5, MotorType.OLD_MOTOR, True, status=MotorStatus.OK, rpm=770),
-            Motor(6, MotorType.NEW_MOTOR, False, status=MotorStatus.NOTUSE, speed_src="manual")]
+            Motor(6, MotorType.NEW_MOTOR, False, status=MotorStatus.NOTUSE, speed_src="manual"),
+            Motor(7, MotorType.NEW_MOTOR, True, status=MotorStatus.OK, rpm=500, mon_only=True, speed_src="mon")]
+    rows[1].ref_line, rows[1].ref_gw, rows[1].ref_id = "H1R1", 2, 7
     lv.set_rows(rows)
-    assert lv.drawn_srcs == ["수동", "참조", "수동", "참조", "", ""]      # 기존모터·사용안함은 표시 없음
+    assert lv.drawn_srcs == ["수동", "참조", "수동", "참조", "", "", "감시"]  # 기존모터·사용안함은 표시 없음
     c = lv.canvas
     badges = [i for i in c.find_withtag("srcbadge") if c.type(i) == "text"]
-    assert [c.itemcget(i, "text") for i in badges] == ["수동", "참조", "수동", "참조"]
+    assert [c.itemcget(i, "text") for i in badges] == ["수동", "참조", "수동", "참조", "감시"]
     # 첫 행: 상태 그림 오른쪽, RPM 숫자 왼쪽
-    _x0, _x1, x2, _x3 = lv._col_x()
+    _x0, _x1, _xi, x2, _x3 = lv._col_x()
     bl, _bt, br, _bb = c.bbox(badges[0])
     num = next(i for i in c.find_all() if c.type(i) == "text" and c.itemcget(i, "text") == "770")
     assert x2 + lv.STATUS_ICON_W < bl and br < c.bbox(num)[0]
@@ -164,14 +180,15 @@ def test_status_column_shows_manual_or_ref_between_icon_and_number(root):
 
     def tip(i):
         return lv._tooltip_text(bx, i * lv.ROW_H + lv.ROW_H // 2)
-    assert tip(0) == "수동: 구역설정의 수동 RPM 으로 운전\n지금 설정 770 RPM (70%)"
-    assert tip(1).startswith("참조(자동): 구역설정의 참조 기존모터 회전수를 따라 운전")
-    assert tip(2) == "수동: 수동 지정 770 RPM (70%)으로 운전"
-    assert tip(3).startswith("참조(자동): 구역 참조")
+    assert tip(0) == "수동: 지정 0 RPM (0%)으로 운전\n지금 설정 770 RPM (70%)"
+    assert tip(1).startswith("참조(자동): 1구역 기존모터 2 ID 7 회전수를 따라 운전")
+    assert tip(2) == "수동: 지정 770 RPM (70%)으로 운전"
+    assert tip(3).startswith("참조(자동): 2구역 기존모터 ID 66 회전수를 같은 비율로 따라 운전")
     assert tip(4) == "항목 더블클릭시 수정/삭제"                          # 표시 없는 행
+    assert tip(6).startswith("감시(모니터링만)")
 
 
-def test_zone_settings_save_updates_badges_at_once(root, tmp_path, monkeypatch):
+def test_zone_settings_save_updates_ip_column_at_once(root, tmp_path, monkeypatch):
     from motor_monitor.ui import dialogs, main_window
     monkeypatch.setattr(dialogs.BaseDialog, "error", lambda self, m, t: None)
     p = _plant(tmp_path)
@@ -181,6 +198,8 @@ def test_zone_settings_save_updates_badges_at_once(root, tmp_path, monkeypatch):
     win = main_window.MainWindow(root, p)
     lv = win.zone_panels["H1R2"].LV
     assert lv.drawn_srcs == ["수동", ""]                                   # 신규모터 3, 기존모터 66 (ID 순)
+    ips = lambda: [lv.canvas.itemcget(i, "text") for i in lv.canvas.find_withtag("ip")]
+    assert ips() == ["4", "3"]                                            # IP 열: 마지막 숫자만 (192.168.0.4 / .3)
     # 톱니 버튼의 구역설정 창은 저장 후 목록까지 갱신하는 콜백을 씀
     seen = {}
 
@@ -194,11 +213,7 @@ def test_zone_settings_save_updates_badges_at_once(root, tmp_path, monkeypatch):
     win.zone_panels["H1R2"].open_settings()
     assert seen["on_saved"] == win.after_line_saved
     d = dialogs.LineSettingsDialog(root, p, "H1R2", on_saved=win.after_line_saved)
-    d.source_mode.set("ref")
-    d._on_mode()
-    d._select_line("R2")
-    d._on_line_changed()
-    d.cb_ids.current(1)
+    d.txtSIP.delete(0, "end"); d.txtSIP.insert(0, "172.27.0.84")
+    d.txtTIP.delete(0, "end"); d.txtTIP.insert(0, "172.27.0.116")
     d.on_save()
-    assert (p.configs["H1R2"].source_manual, p.configs["H1R2"].source_id) == (False, 66)
-    assert lv.drawn_srcs == ["참조", ""]                                   # 저장 즉시 '참조'
+    assert ips() == ["116", "84"]                                         # 저장 즉시 목록 IP 열 갱신

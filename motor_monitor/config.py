@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 SEC_LINE = "LINE_CONFIG"
 SEC_MOTOR = "MOTOR_CONFIG"
 SEC_CTRL = "CTRL_MOTOR_CONFIG"   # 기존모터제어 목록 (이 프로그램 전용 섹션, 운영 프로그램은 무시)
+SEC_OPT = "MOTOR_OPTION"         # 모터별 추가 설정 (2.7.0~): 기존모터 통신장치 1/2, 속도 지정(수동/참조), 모니터링만
 
 
 class ConfigError(Exception):
@@ -32,15 +33,27 @@ class ConfigError(Exception):
 
 @dataclass
 class LineConfig:
-    """구역 1개의 통신/제어 설정."""
-    source_ip: str          # 기존모터 IP
+    """구역 1개의 통신 설정.
+    source_manual ~ source_id 는 2.6.0 까지의 '구역 RPM 제어 소스'. 2.7.0 부터 속도 지정은 모터마다 정하며
+    (MotorEntry.ctrl_mode 등), 이 값들은 예전 설정 파일을 읽을 때 모터별 설정으로 옮기는 데만 씀
+    (파일에는 읽은 값을 그대로 다시 기록 - 예전 버전으로 되돌려도 같은 동작)."""
+    source_ip: str          # 기존모터 IP 1
     source_port: int        # 기존모터 PORT (502 고정, 화면에 없음)
     target_ip: str          # 신규모터 IP
     target_port: int        # 신규모터 PORT (502 고정, 화면에 없음)
-    source_manual: bool     # True: 수동 RPM / False: 기존모터 RPM 참조
-    manual_rpm: int         # 수동 RPM 값
-    source_line: str        # 참조 기존모터가 있는 구역 코드 (예: H1R1)
-    source_id: int          # 참조 기존모터 ID
+    source_manual: bool     # (예전) True: 수동 RPM / False: 기존모터 RPM 참조
+    manual_rpm: int         # (예전) 수동 RPM 값
+    source_line: str        # (예전) 참조 기존모터가 있는 구역 코드 (예: H1R1)
+    source_id: int          # (예전) 참조 기존모터 ID
+    source_ip2: str = ""    # 기존모터 IP 2 (두 번째 기존모터 통신장치, 없으면 "")
+
+    def source_ips(self) -> List[str]:
+        """등록된 기존모터 IP 목록 [IP1] 또는 [IP1, IP2]."""
+        return [self.source_ip] + ([self.source_ip2] if self.source_ip2 else [])
+
+    def gw_ip(self, gw: int) -> str:
+        """기존모터 통신장치 번호(1/2) -> IP (2 가 없으면 "")."""
+        return self.source_ip2 if gw == 2 else self.source_ip
 
     def copy(self, **changes) -> "LineConfig":
         return replace(self, **changes)
@@ -54,8 +67,20 @@ class MotorEntry(NamedTuple):
     limit_rpm: int = 0          # 속도제한 최대 RPM
     ip: str = ""                # 기존모터제어: 접속 IP
     port: int = 0               # 기존모터제어: 접속 PORT (502 고정)
-    set_rpm: int = 0            # 기존모터제어: 지정 운전 속도 (RPM, 수동 지정)
-    ctrl_mode: str = CTRL_MODE_MANUAL   # 기존모터제어: 속도 지정 방법 (manual 수동 / ref 구역 참조)
+    set_rpm: int = 0            # 신규모터·기존모터제어: 수동 지정 속도 (RPM)
+    ctrl_mode: str = CTRL_MODE_MANUAL   # 신규모터·기존모터제어: 속도 지정 방법 (manual 수동 / ref 기존모터 참조)
+    gw: int = 1                 # 기존모터: 구역의 기존모터 통신장치 번호 (1 = IP 1, 2 = IP 2)
+    ref_line: str = ""          # 참조: 참조 기존모터가 있는 구역 코드 (예: H1R1)
+    ref_gw: int = 1             # 참조: 그 기존모터의 통신장치 번호 (1/2)
+    ref_id: int = 0             # 참조: 그 기존모터 ID
+    mon_only: bool = False      # 신규모터·기존모터제어: 모니터링만 (전체 모드와 상관없이 이 모터에는 제어 신호 안 보냄)
+
+    @property
+    def base_key(self) -> str:
+        """[MOTOR_OPTION] 에서 모터를 찾는 이름 ('0_5', '1_3', '2_180@IP'). 통신장치 번호는 넣지 않음."""
+        if self.mtype == MotorType.OLD_CTRL:
+            return f"{int(self.mtype)}_{self.id}@{self.ip}"
+        return f"{int(self.mtype)}_{self.id}"
 
 
 def app_base_dir() -> str:
@@ -170,6 +195,84 @@ def format_ctrl_list(motors: List[MotorEntry]) -> str:
     return ",".join(_format_ctrl(m) for m in motors if m.mtype == MotorType.OLD_CTRL)
 
 
+# ---- 모터별 추가 설정 [MOTOR_OPTION] (2.7.0~)
+# 항목: '<이름>/<키>:<값>/...' 쉼표로 구분, [MOTOR_CONFIG]·[CTRL_MOTOR_CONFIG] 와 같은 순서.
+#   이름 = base_key ('0_5', '1_3', '2_180@172.27.0.95'), 같은 이름이 여럿이면(통신장치 1·2 의 같은 ID) 순서대로 짝지음
+#   GW:2 기존모터 통신장치 2 / SRC:M 수동, SRC:R 참조 / RPM:770 수동 속도 / REF:H1R2-1-66 참조 구역-통신장치-ID / MON:1
+def _format_option(m: MotorEntry) -> str:
+    parts = [m.base_key]
+    if m.mtype == MotorType.OLD_MOTOR:
+        parts.append(f"GW:{m.gw}")
+    else:
+        parts.append(f"SRC:{'R' if m.ctrl_mode == CTRL_MODE_REF else 'M'}")
+        parts.append(f"RPM:{m.set_rpm}")
+        if m.ref_line:
+            parts.append(f"REF:{m.ref_line}-{m.ref_gw}-{m.ref_id}")
+        parts.append(f"MON:{1 if m.mon_only else 0}")
+    return "/".join(parts)
+
+
+def format_option_list(motors: List[MotorEntry]) -> str:
+    order = [m for m in motors if m.mtype != MotorType.OLD_CTRL] + [m for m in motors if m.mtype == MotorType.OLD_CTRL]
+    return ",".join(_format_option(m) for m in order)
+
+
+def parse_option_list(data: str) -> Dict[str, List[Dict[str, str]]]:
+    """'0_5/GW:2,1_3/SRC:M/RPM:770' -> {'0_5': [{'GW': '2'}], '1_3': [{...}]} (같은 이름은 순서대로 목록)."""
+    out: Dict[str, List[Dict[str, str]]] = {}
+    for item in filter(None, data.split(",")):
+        name, *opts = item.split("/")
+        d: Dict[str, str] = {}
+        for o in opts:
+            k, sep, v = o.partition(":")
+            if sep:
+                d[k.strip().upper()] = v.strip()
+        out.setdefault(name.strip(), []).append(d)
+    return out
+
+
+def apply_options(motors: List[MotorEntry], options: Dict[str, List[Dict[str, str]]],
+                  line: LineConfig) -> List[MotorEntry]:
+    """모터별 추가 설정 적용. 추가 설정이 없는 신규모터·기존모터제어(구역 참조)는 예전 구역 RPM 제어 소스를 옮겨 받음."""
+    pending = {k: list(v) for k, v in options.items()}
+    out: List[MotorEntry] = []
+    for m in motors:
+        lst = pending.get(m.base_key)
+        opt = lst.pop(0) if lst else None
+        if m.mtype == MotorType.OLD_MOTOR:
+            gw = _to_int(opt.get("GW", "1"), 1) if opt else 1
+            out.append(m._replace(gw=2 if gw == 2 else 1))
+            continue
+        if opt is None:
+            out.append(migrate_entry(m, line))
+            continue
+        ref_line, ref_gw, ref_id = "", 1, 0
+        ref = opt.get("REF", "")
+        if ref:
+            bits = ref.split("-")
+            if len(bits) == 3:
+                ref_line, ref_gw, ref_id = bits[0], (2 if _to_int(bits[1], 1) == 2 else 1), _to_int(bits[2])
+        mode = CTRL_MODE_REF if opt.get("SRC", "M").upper() == "R" else CTRL_MODE_MANUAL
+        rpm = _to_int(opt.get("RPM", str(m.set_rpm)), m.set_rpm)
+        out.append(m._replace(ctrl_mode=mode, set_rpm=rpm, ref_line=ref_line, ref_gw=ref_gw, ref_id=ref_id,
+                              mon_only=opt.get("MON", "0") == "1"))
+    return out
+
+
+def migrate_entry(m: MotorEntry, line: LineConfig) -> MotorEntry:
+    """2.6.0 까지의 설정: 신규모터는 구역 RPM 제어 소스, 기존모터제어 '구역 참조'는 그 구역 신규모터가 따르던 값."""
+    ref = dict(ref_line=line.source_line, ref_gw=1, ref_id=line.source_id) if line.source_line else {}
+    if m.mtype == MotorType.NEW_MOTOR:
+        if line.source_manual:
+            return m._replace(ctrl_mode=CTRL_MODE_MANUAL, set_rpm=line.manual_rpm, **ref)
+        return m._replace(ctrl_mode=CTRL_MODE_REF, set_rpm=line.manual_rpm or DEFAULT_MANUAL_RPM, **ref)
+    if m.ctrl_mode == CTRL_MODE_REF:
+        if line.source_manual:
+            return m._replace(ctrl_mode=CTRL_MODE_MANUAL, set_rpm=line.manual_rpm, **ref)
+        return m._replace(**ref)
+    return m
+
+
 def read_config_text(path: str) -> str:
     """Config.dll 을 읽어 INI 텍스트 반환. 파일이 없거나 비어 있으면 빈 문자열."""
     if not os.path.exists(path):
@@ -212,9 +315,11 @@ def config_from_text(text: str) -> Tuple[Dict[str, LineConfig], Dict[str, List[M
             manual_rpm=_to_int(_ini_read(ini, SEC_LINE, f"{s}_MANUAL_RPM", str(DEFAULT_MANUAL_RPM))),
             source_line=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_LINE", ""),
             source_id=_to_int(_ini_read(ini, SEC_LINE, f"{s}_SOURCE_ID", "0")),
+            source_ip2=_ini_read(ini, SEC_LINE, f"{s}_SOURCE_IP2", ""),
         )
-        motors[s] = (parse_motor_list(_ini_read(ini, SEC_MOTOR, f"{s}_MOTORS", ""))
-                     + parse_ctrl_list(_ini_read(ini, SEC_CTRL, f"{s}_MOTORS", "")))
+        base = (parse_motor_list(_ini_read(ini, SEC_MOTOR, f"{s}_MOTORS", ""))
+                + parse_ctrl_list(_ini_read(ini, SEC_CTRL, f"{s}_MOTORS", "")))
+        motors[s] = apply_options(base, parse_option_list(_ini_read(ini, SEC_OPT, f"{s}_MOTORS", "")), configs[s])
         idx += 2
     return configs, motors
 
@@ -233,6 +338,7 @@ def build_config_text(configs: Dict[str, LineConfig], motors: Dict[str, List[Mot
             f"{s}_MANUAL_RPM={c.manual_rpm}",
             f"{s}_SOURCE_LINE={c.source_line}",
             f"{s}_SOURCE_ID={c.source_id}",
+            f"{s}_SOURCE_IP2={c.source_ip2}",
         ]
     lines.append(f"[{SEC_MOTOR}]")
     for s in HOUSE_LINES:
@@ -242,6 +348,9 @@ def build_config_text(configs: Dict[str, LineConfig], motors: Dict[str, List[Mot
         lines.append(f"[{SEC_CTRL}]")
         for s in HOUSE_LINES:
             lines.append(f"{s}_MOTORS={format_ctrl_list(motors.get(s, []))}")
+    lines.append(f"[{SEC_OPT}]")
+    for s in HOUSE_LINES:
+        lines.append(f"{s}_MOTORS={format_option_list(motors.get(s, []))}")
     return "\r\n".join(lines) + "\r\n"
 
 

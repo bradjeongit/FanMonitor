@@ -52,43 +52,71 @@ def test_zone_dialog_validation_and_save(ui, plant):
     d = dialogs.LineSettingsDialog(win.root, plant, "H1R1", on_saved=win.update_header_box)
     assert d.lbl_house.cget("text") == "1구역"
     assert d.title_label.cget("text") == "구역설정"
-    assert list(d.cb_lines.cget("values")) == ["구역선택"] + [f"{i}구역" for i in range(1, 9)]
-    assert d.source_mode.get() == "manual"
+    assert not hasattr(d, "source_mode") and not hasattr(d, "txtMRPM")   # RPM 제어 소스는 모터마다 (2.7.0)
+    assert d.txtSIP2.get() == ""
 
     d.txtSIP.delete(0, "end"); d.txtSIP.insert(0, "300.1.1.1")
     d.on_save()
-    assert msgs[-1] == ("에러", "기존모터 접속 IP가 올바른 형식이 아닙니다..")
+    assert msgs[-1] == ("에러", "기존모터 접속 IP 1이 올바른 형식이 아닙니다..")
     d.txtSIP.delete(0, "end"); d.txtSIP.insert(0, "172.27.0.82")
-    d.txtMRPM.delete(0, "end"); d.txtMRPM.insert(0, "1200")
+    d.txtSIP2.insert(0, "172.27.0")
     d.on_save()
-    assert msgs[-1] == ("에러", "수동 RPM속도를 0~1100범위내로 입력해주세요.")
-    d.txtMRPM.delete(0, "end"); d.txtMRPM.insert(0, "800")
+    assert msgs[-1] == ("에러", "기존모터 접속 IP 2가 올바른 형식이 아닙니다..")
+    d.txtSIP2.delete(0, "end"); d.txtSIP2.insert(0, "172.27.0.82")
+    d.on_save()
+    assert msgs[-1][1].startswith("기존모터 접속 IP 2가 IP 1과 같습니다")
+    d.txtSIP2.delete(0, "end"); d.txtSIP2.insert(0, "172.27.0.83")
     d.on_save()
     c = plant.configs["H1R1"]
-    assert (c.source_ip, c.manual_rpm, c.source_manual) == ("172.27.0.82", 800, True)
+    assert (c.source_ip, c.source_ip2) == ("172.27.0.82", "172.27.0.83")
     assert (c.source_port, c.target_port) == (502, 502)                 # PORT 는 502 고정
     assert not hasattr(d, "txtSPORT") and not hasattr(d, "txtTPORT")    # PORT 입력칸 없음
-    assert win.zone_panels["H1R1"].lbl_source.cget("text") == "수동 > 800 RPM"
-    assert win.zone_panels["H1R1"].lbl_old_ip.cget("text") == "172.27.0.82"   # PORT 표시 없음
+    zp = win.zone_panels["H1R1"]
+    assert zp.lbl_old_ip.cget("text") == "172.27.0.82"                  # PORT 표시 없음
+    assert zp.lbl_old_ip2.cget("text") == "172.27.0.83"
+    assert not hasattr(zp, "lbl_source")                                # 머리 영역의 RPM 소스 줄 없음
+    assert "H1R1_SOURCE_IP2=172.27.0.83" in decrypt_config(open(plant.config_path, "rb").read())
+    # IP 2 에 기존모터가 있으면 IP 2 를 비울 수 없음
+    plant.houses["H1R1"].add_motor(7, MotorType.OLD_MOTOR, True, gw=2)
+    d = dialogs.LineSettingsDialog(win.root, plant, "H1R1", on_saved=win.update_header_box)
+    assert d.txtSIP2.get() == "172.27.0.83"
+    d.txtSIP2.delete(0, "end")
+    d.on_save()
+    assert msgs[-1][1].startswith("기존모터 IP 2에 등록된 기존모터가 있어")
+    d.destroy()
 
 
-def test_zone_dialog_reference_mode(ui, plant):
+def test_motor_reference_mode_per_motor(ui, plant):
+    """RPM 제어 소스는 모터마다: 신규모터 추가 창에서 참조 기존모터(구역 > ID)를 고름."""
     win, dialogs, msgs, _ = ui
+    plant.configs["H1R2"] = plant.configs["H1R2"].copy(source_ip2="172.27.0.99")
     plant.houses["H1R2"].add_motor(66, MotorType.OLD_MOTOR, True)
-    d = dialogs.LineSettingsDialog(win.root, plant, "H1R4", on_saved=win.update_header_box)
-    d.source_mode.set("ref"); d._on_mode()
-    d._select_line(""); d._on_line_changed()
+    plant.houses["H1R2"].add_motor(7, MotorType.OLD_MOTOR, True, gw=2)
+    d = dialogs.MotorDialog(win.root, plant, win.images, "H1R4", "ADD")
+    d.motor_type_var.set(1); d._on_type()
+    assert d.speed_rows_visible and d.txtSETRPM.get() == "770" and d.ctrl_mode_var.get() == "manual"
+    d.txtID.insert(0, "5")
+    d.ctrl_mode_var.set("ref"); d._on_ctrl_mode()
+    d._select_ref_line(""); d._on_ref_line_changed()
     d.on_save()
-    assert msgs[-1] == ("에러", "참조할 모터가 있는 구역을 선택해주세요.")
-    d._select_line("R2"); d._on_line_changed()
-    assert list(d.cb_ids.cget("values")) == ["ID", "66"]
+    assert msgs[-1] == ("오류", "참조할 기존모터(구역과 ID)를 선택해 주세요.")
+    d._select_ref_line("H1R2"); d._on_ref_line_changed()
+    assert list(d.cb_ref_motor.cget("values")) == ["ID", "66", "7 (IP 2)"]
     d.on_save()
-    assert msgs[-1] == ("에러", "참조할 모터 ID를 선택해주세요.")
-    d.cb_ids.current(1)
+    assert msgs[-1] == ("오류", "참조할 기존모터(구역과 ID)를 선택해 주세요.")
+    d.cb_ref_motor.current(2)
     d.on_save()
-    c = plant.configs["H1R4"]
-    assert (c.source_manual, c.source_line, c.source_id) == (False, "H1R2", 66)
-    assert win.zone_panels["H1R4"].lbl_source.cget("text") == "2구역 > 66"
+    m = plant.houses["H1R4"].get_motor("1_5")
+    assert (m.ctrl_mode, m.ref_line, m.ref_gw, m.ref_id, m.mon_only) == ("ref", "H1R2", 2, 7, False)
+    assert plant.configs["H1R4"].source_manual                         # 구역 설정은 바뀌지 않음
+    # 수정 창: 참조 그대로 보이고, 수동으로 바꾸면 그 모터만 수동
+    d = dialogs.MotorDialog(win.root, plant, win.images, "H1R4", "MOD", mod_dkey="1_5")
+    assert d.ctrl_mode_var.get() == "ref" and d.selected_ref() == ("H1R2", 2, 7)
+    d.ctrl_mode_var.set("manual"); d._on_ctrl_mode()
+    d._set_text(d.txtSETRPM, 650)
+    d.on_save()
+    m = plant.houses["H1R4"].get_motor("1_5")
+    assert (m.ctrl_mode, m.set_rpm) == ("manual", 650)
 
 
 def test_motor_add_with_limit(ui, plant):
@@ -141,11 +169,13 @@ def test_motor_modify_and_delete(ui, plant):
 
     d = dialogs.MotorDialog(win.root, plant, win.images, "H1R1", "MOD", mod_dkey="0_2", on_changed=zp.refresh)
     d.update_idletasks()
-    assert not d.limit_row_visible                                # 기존모터는 속도제한 없음
-    plant.configs["H1R5"] = plant.configs["H1R5"].copy(source_manual=False, source_line="H1R1", source_id=2)
+    assert not d.limit_row_visible and not d.speed_rows_visible   # 기존모터는 속도제한·운전속도 없음
+    assert d.gw_row_visible and str(d.cb_gw.cget("state")) == "disabled"   # 통신장치는 보이기만
+    plant.houses["H1R5"].add_motor(3, MotorType.NEW_MOTOR, True, ctrl_mode="ref", ref_line="H1R1", ref_id=2)
     d.on_delete()
-    assert msgs[-1] == ("오류", "해당 모터를 참조로 사용하는 구역이 있습니다. 변경 후, 삭제할 수 있습니다.")
-    plant.configs["H1R5"] = plant.configs["H1R5"].copy(source_manual=True)
+    assert msgs[-1] == ("오류", "해당 모터를 참조로 사용하는 모터가 있습니다. 변경 후, 삭제할 수 있습니다.\n"
+                               "5구역 신규모터 ID 3")
+    plant.houses["H1R5"].mod_motor("1_3", True, ctrl_mode="manual")
     d.on_delete()
     assert [r.key for r in zp.LV.rows] == ["1_20"]
 
@@ -162,7 +192,8 @@ def test_zone_start_stop_and_status_icons(ui, plant, monkeypatch):
     assert zp.rec_SOURCE_NETSTATUS.color == T.NET_STOP
     zp.on_start()
     assert started == ["H1R2"]
-    assert zp.rec_SOURCE_NETSTATUS.color == T.NET_ERR and zp.rec_SID_NETSTATUS.color == T.NET_OK
+    assert zp.rec_SOURCE_NETSTATUS.color == T.NET_ERR
+    assert zp.rec_SOURCE2_NETSTATUS.color == T.NET_STOP                       # 기존모터 IP 2 없음
     assert win.zone_panels["H1R1"].rec_SOURCE_NETSTATUS.color == T.NET_STOP   # 다른 구역은 그대로
     zp.on_stop()
     assert zp.rec_SOURCE_NETSTATUS.color == T.NET_STOP
@@ -170,15 +201,17 @@ def test_zone_start_stop_and_status_icons(ui, plant, monkeypatch):
     h = plant.houses["H1R2"]
     h.add_motor(1, MotorType.NEW_MOTOR, True, True, 400)
     m = h.get_motor("1_1")
-    assert MotorListView.type_icon(m) == ("newmotor_limit", "신규모터(제한모드)")
+    assert MotorListView.type_icon(m) == ("newmotor_limit", "신규모터(제한모드 최대 400 RPM)")
     m.status, m.had_err, m.err_note = MotorStatus.OK, True, "192.168.0.4 접속 실패"
     assert MotorListView.status_icon(m) == ("bad_haderr", "통신 이상\n192.168.0.4 접속 실패")
     m.status = MotorStatus.READY                                  # 한 번도 응답하지 않은 채 이상
     assert MotorListView.status_icon(m)[0] == "bad_haderr"
     m.had_err, m.err_note = False, ""
     assert MotorListView.status_icon(m) == (None, "")
-    m.status = MotorStatus.OK                                     # 다시 응답 -> 정상 그림
+    m.status, m.rpm = MotorStatus.OK, 640                         # 다시 응답 -> 정상 그림
     assert MotorListView.status_icon(m) == ("good", "정상")
+    m.rpm = 0                                                     # 응답은 정상이지만 멈춤
+    assert MotorListView.status_icon(m) == ("good", "정상 응답 - 회전수 0 (멈춤)")
     m.status = MotorStatus.ERR
     assert MotorListView.status_icon(m) == ("bad_new", "이상 (오래 응답 없음)")
 
